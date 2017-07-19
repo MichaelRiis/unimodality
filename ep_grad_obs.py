@@ -4,12 +4,12 @@ from scipy.integrate import quad
 from scipy.stats import norm
 
 npdf = lambda x, m, v: 1./np.sqrt(2*np.pi*v)*np.exp(-(x-m)**2/(2*v))
+log_npdf = lambda x, m, v: -0.5*np.log(2*np.pi*v) -(x-m)**2/(2*v)
 phi = lambda x: norm.cdf(x)
 logphi = lambda x: norm.logcdf(x)
 
-
-def predict(mu, Sigma_full, K, t, t2, t_pred, k1, k2):
-
+def _predict(mu, Sigma_full, K, t, t2, t_pred, k1, k2):
+	""" returns predictive mean and full covariance """
 	# kernel functions
 	cov_fun = lambda x, y: k1**2*np.exp(-0.5*(x-y)**2/k2**2)
 	cov_fun1 = lambda x, y: -cov_fun(x,y)*(x-y)/k2**2
@@ -25,9 +25,44 @@ def predict(mu, Sigma_full, K, t, t2, t_pred, k1, k2):
 	H =  np.linalg.solve(K, Kpf.T)
 	pred_mean = np.dot(H.T, mu)
 	pred_cov = Kpp -  np.dot(Kpf, H) + np.dot(H.T, np.dot(Sigma_full, H))
-	pred_var = np.diag(pred_cov)
+	return pred_mean, pred_cov
 
+
+def predict(mu, Sigma_full, K, t, t2, t_pred, k1, k2):
+
+	pred_mean, pred_cov = _predict(mu, Sigma_full, K, t, t2, t_pred, k1, k2)
+	pred_var = np.diag(pred_cov)
 	return pred_mean, pred_var
+
+def lppd(mu, Sigma_full, K, t, t2, t_pred, y_pred, k1, k2, sigma2 = None, per_sample=False):
+	""" compute log posterior predictive density of data pairs (t_pred, y_pred) """
+
+	pred_mean, pred_var = predict(mu, Sigma_full, K, t, t2, t_pred, k1, k2)
+
+	if sigma2 is None:
+		sigma2 = 0
+
+	lppds = log_npdf(y_pred.ravel(), pred_mean.ravel(), pred_var.ravel() + sigma2)
+
+	if not per_sample:
+		lppds = np.sum(lppds)
+
+	return lppds
+	
+	# pred_mean, pred_cov = _predict(mu, Sigma_full, K, t, t2, t_pred, k1, k2)
+
+	# if not sigma2 is None:
+	# 	pred_cov = pred_cov + sigma2*np.identity(pred_cov.shape[0])
+
+	# if not full_cov:
+	# 	pred_cov = np.diag(np.diag(pred_cov))
+
+	# L = np.linalg.cholesky(pred_cov + jitter*np.identity(pred_cov.shape[0]))
+	# b = np.linalg.solve(L, y_pred.ravel() - pred_mean)
+
+	# return -0.5*len(y_pred.ravel())*np.log(2*np.pi) - 0.5*2*np.sum(np.log(np.diag(L))) - 0.5*np.sum(b**2)
+
+
 
 def generate_joint_derivative_kernel(t, t2, k1, k2, jitter = 1e-8):
 
@@ -117,7 +152,7 @@ def EP_grad_obs(t, t2, y, z, K, sigma2, max_itt = 100):
             eta_cav, theta_cav = mu[i]/Sigma[i] - eta_z[i], 1./Sigma[i] - theta_z[i]
             m_cav, v_cav = eta_cav/theta_cav, 1./theta_cav
 
-            # setup tilted distribution & compute momemnts
+            # setup tilted distribution & compute moments
             tilted = lambda x: phi(z[j]*x)*npdf(x, m_cav, v_cav)
             lower, upper = m_cav - 9*np.sqrt(v_cav), m_cav + 9*np.sqrt(v_cav)
             Z = quad(tilted, lower, upper)[0]

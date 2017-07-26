@@ -155,6 +155,10 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., al
 			m_cav_fp, v_cav_fp = eta_cav_fp/theta_cav_fp, 1./theta_cav_fp
 			m_cav_g, v_cav_g = eta_cav_g/theta_cav_g, 1./theta_cav_g
 
+			if v_cav_fp <= 0 or v_cav_g <= 0:
+				print('Negative cavity variance for site %d! Skipping...' % j)
+				continue
+
 			# compute moments
 			# tilted = lambda fp, g: ( phi(-fp)*(1- phi(g)) + phi(fp)*phi(g) )*npdf(fp, m_cav_fp, v_cav_fp)*npdf(g, m_cav_g, v_cav_g)
 
@@ -226,5 +230,36 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., al
 			mu_f, Sigma_f, Sigma_full_f, Lf = update_posterior(Kf, eta_fp + eta_y, theta_fp + theta_y)
 			mu_g, Sigma_g, Sigma_full_g, Lg = update_posterior(Kg, eta_g + eta_gp, theta_g + theta_gp)
 
-	return mu_f, Sigma_f, mu_g, Sigma_g
 
+
+	return mu_f, Sigma_f, Sigma_full_f, mu_g, Sigma_g, Sigma_full_g
+
+
+
+def _predict(mu, Sigma_full, t, t2, t_pred, k1, k2):
+	""" returns predictive mean and full covariance """
+	# kernel functions
+	cov_fun = lambda x, y: k1**2*np.exp(-0.5*(x-y)**2/k2**2)
+	cov_fun1 = lambda x, y: -cov_fun(x,y)*(x-y)/k2**2
+	cov_fun2 = lambda x, y: cov_fun(x,y)*(1 - (x-y)**2/k2**2 )/k2**2
+
+	D, N, P = len(mu), t.shape[0], t_pred.shape[0]
+
+	K = generate_joint_derivative_kernel(t, t2, k1, k2)
+
+	Kpp = cov_fun(t_pred, t_pred.T)
+	Kpf = np.zeros((P, D))
+	Kpf[:, :N] = cov_fun(t_pred, t.T)
+	Kpf[:, N:] = cov_fun1(t2, t_pred.T).T
+
+	H =  np.linalg.solve(K, Kpf.T)
+	pred_mean = np.dot(H.T, mu)
+	pred_cov = Kpp -  np.dot(Kpf, H) + np.dot(H.T, np.dot(Sigma_full, H))
+	return pred_mean, pred_cov
+
+
+def predict(mu, Sigma_full, t, t2, t_pred, k1, k2):
+
+	pred_mean, pred_cov = _predict(mu, Sigma_full, t, t2, t_pred, k1, k2)
+	pred_var = np.diag(pred_cov)
+	return pred_mean, pred_var

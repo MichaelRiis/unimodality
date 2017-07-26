@@ -65,7 +65,7 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., al
 	eta_y[:N], theta_y[:N] = y[:, 0]/sigma2, 1./sigma2
 
 	# sites connecting f' and g
-	eta_fp, theta_fp = np.zeros(Dg), 1e-10*np.ones(Dg)
+	eta_fp, theta_fp = np.zeros(Df), 1e-10*np.ones(Df)
 	eta_g, theta_g = np.zeros(Dg), 1e-10*np.ones(Dg)
 
 	# sites for g' and m
@@ -73,7 +73,7 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., al
 
 	# prepare kernels
 	Kf = generate_joint_derivative_kernel(t, t2, k1, k2)
-	Kg = generate_joint_derivative_kernel(t, t2, k1, k2)
+	Kg = generate_joint_derivative_kernel(t2, t2, k1, k2)
 
 	# prepare global approximation
 	mu_f, Sigma_f, Sigma_full_f, Lf = update_posterior(Kf, eta_fp + eta_y, theta_fp + theta_y)

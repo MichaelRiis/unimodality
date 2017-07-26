@@ -24,7 +24,7 @@ sigma2 = 10.
 k1, k2 = 5., 2.
 
 N = 20
-M = 20
+M = 40
 t = np.linspace(-5, 5, N)[:, None]
 t2 = np.linspace(-5, 5, M)[:, None]
 ys = [f(t) + np.random.normal(0, np.sqrt(sigma2), size=(N, 1)) for f in fs]

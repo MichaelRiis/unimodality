@@ -7,24 +7,14 @@ from scipy.stats import norm, t as tdist
 
 import GPy
 
-
 import ep_unimodality as EP
 reload(EP)
 from ep_unimodality import phi
+from util import plot_with_uncertainty
 
 import seaborn as snb
 
 np.random.seed(0)
-
-def plot_with_uncertainty(x, y, ystd=None, color='r', linestyle='-', fill=True, label=''):
-    plt.plot(x, y, color=color, linestyle=linestyle, label=label)
-    if not ystd is None:
-        lower, upper = y - np.sqrt(ystd), y + np.sqrt(ystd)
-        plt.plot(x, lower, color=color, alpha=0.5, linestyle=linestyle)
-        plt.plot(x, upper, color=color, alpha=0.5, linestyle=linestyle)
-        
-        if fill:
-            plt.fill_between(x.ravel(), lower, upper, color=color, alpha=0.25, linestyle=linestyle)
 
 
 fs = [lambda x: -norm.logpdf(x-1, 0, 1) - 7, lambda x: -4*(tdist.logpdf(x+2, 1) + 2.8), lambda x: 0.3*(x**2 - 25)*np.sin(x+0.5*np.pi), lambda x: 5*np.sin(x+0.5*np.pi)]
@@ -39,11 +29,6 @@ t = np.linspace(-5, 5, N)[:, None]
 t2 = np.linspace(-5, 5, M)[:, None]
 ys = [f(t) + np.random.normal(0, np.sqrt(sigma2), size=(N, 1)) for f in fs]
 
-# plt.figure(figsize = (25, 5))
-# for idx, (y, f) in enumerate(zip(ys, fs)):
-#     plt.subplot(1, len(fs), 1 + idx)
-#     plt.plot(t, f(t))
-#     plt.plot(t, y, 'k.')
 
 
 plt.figure(figsize = (16, 9))

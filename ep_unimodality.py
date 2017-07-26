@@ -85,7 +85,8 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., al
 			print('Iteration %d' % (itt + 1))
 
 		# approximate constraints to enforce monotonicity to g
-		for j in np.random.choice(range(M), size=M, replace=False):
+		j_list = np.random.choice(range(M), size=M, replace=False) if M > 0 else []
+		for j in j_list:
 
 			# compute offset for gradient indices
 			i = M + j
@@ -141,7 +142,8 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., al
 
 
 		# approximate constraints to enforce a single sign change for f'
-		for j in np.random.choice(range(M), size = M, replace=False):
+		j_list = np.random.choice(range(M), size=M, replace=False) if M > 0 else []
+		for j in j_list:
 
 			i = N + j
 

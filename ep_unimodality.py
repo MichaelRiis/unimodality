@@ -263,3 +263,17 @@ def predict(mu, Sigma_full, t, t2, t_pred, k1, k2):
 	pred_mean, pred_cov = _predict(mu, Sigma_full, t, t2, t_pred, k1, k2)
 	pred_var = np.diag(pred_cov)
 	return pred_mean, pred_var
+
+
+def sample_z_probabilities(mu, Sigma_full, t, t2, t_pred, k1, k2, num_samples = 1000):
+
+
+	pred_mean, pred_cov = _predict(mu, Sigma_full, t, t2, t_pred, k1, k2)
+	D = pred_cov.shape[0]
+
+	L = np.linalg.cholesky(pred_cov + 1e-8*np.identity(D)) 
+
+	zs = pred_mean[:, None] + np.dot(L, np.random.normal(0, 1, size=(D, num_samples)))
+	pzs = phi(zs)
+
+	return np.mean(pzs, axis = 1), np.var(pzs, axis = 1)

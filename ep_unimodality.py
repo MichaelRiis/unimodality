@@ -81,6 +81,8 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., al
 
 	for itt in range(max_itt):
 
+		old_params = np.hstack((mu_f, Sigma_f, mu_g, Sigma_g))
+
 		if verbose > 0:
 			print('Iteration %d' % (itt + 1))
 
@@ -209,12 +211,12 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., al
 			new_eta_g, new_theta_g = site_g_m/site_g_v - eta_cav_g, 1./site_g_v - theta_cav_g
 
 			if new_theta_fp <= 0:
-				new_theta_fp = 1e-10
+				new_theta_fp = 1e-6
 				new_variance_fp = 1./(new_theta_fp + theta_cav_fp)
 				new_eta_fp = site_fp_m/new_variance_fp - eta_cav_fp
 
 			if new_theta_g <= 0:
-				new_theta_g = 1e-10
+				new_theta_g = 1e-6
 				new_variance_g = 1./(new_theta_g + theta_cav_g)
 				new_eta_g = site_g_m/new_variance_g - eta_cav_g
 
@@ -230,10 +232,59 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., al
 			mu_f, Sigma_f, Sigma_full_f, Lf = update_posterior(Kf, eta_fp + eta_y, theta_fp + theta_y)
 			mu_g, Sigma_g, Sigma_full_g, Lg = update_posterior(Kg, eta_g + eta_gp, theta_g + theta_gp)
 
+		# check for convergence
+		new_params = np.hstack((mu_f, Sigma_f, mu_g, Sigma_g))
+		if np.mean((new_params-old_params)**2)/np.mean(old_params**2) < tol:
+			print('Converged in %d iterations' % (itt + 1))
+			break
 
 
-	return mu_f, Sigma_f, Sigma_full_f, mu_g, Sigma_g, Sigma_full_g
 
+	# marginal likelihood
+	f_term = compute_marginal_likelihood_mvn(Lf, mu_f, Sigma_full_f, eta_fp + eta_y, theta_fp + theta_y)
+	g_term = compute_marginal_likelihood_mvn(Lg, mu_g, Sigma_full_g, eta_g + eta_gp, theta_g + theta_gp)
+
+	# log k_i
+	eta_cav, theta_cav = mu_g/Sigma_g - eta_gp, 1./Sigma_g - theta_gp
+	mu_cav, tau_cav = eta_cav/theta_cav, 1./theta_cav
+
+	log_k1 = np.sum(logphi(m.ravel()*mu_cav[M:]/np.sqrt(1 + tau_cav[M:])))
+	log_k2 = 0.5*np.sum(np.log(tau_cav[M:] + 1./theta_gp[M:])) + 0.5*np.sum((mu_cav[M:] - eta_gp[M:]/theta_gp[M:])**2/(tau_cav[M:] + 1./theta_gp[M:]))
+
+
+	# log c_i
+	eta_cav_fp, theta_cav_fp = mu_f/Sigma_f - eta_fp, 1./Sigma_f - theta_fp
+	eta_cav_g, theta_cav_g = mu_g/Sigma_g - eta_g, 1./Sigma_g - theta_g
+
+	m_cav_fp, v_cav_fp = eta_cav_fp/theta_cav_fp, 1./theta_cav_fp
+	m_cav_g, v_cav_g = eta_cav_g/theta_cav_g, 1./theta_cav_g
+
+	log_c1 = np.sum(logphi(-m_cav_fp[N:]/np.sqrt(1 + v_cav_fp[N:]))) + np.sum(logphi(m_cav_fp[N:]/np.sqrt(1 + v_cav_fp[N:])))
+	log_c2 = np.sum(logphi(-m_cav_g[:M]/np.sqrt(1 + v_cav_g[:M]))) + np.sum(logphi(m_cav_g[:M]/np.sqrt(1 + v_cav_g[:M])))
+
+	log_c3 = 0.5*np.sum(np.log(v_cav_fp[N:] + 1./theta_fp[N:])) + 0.5*np.sum((m_cav_fp[N:] - eta_fp[N:]/theta_fp[N:])**2/(v_cav_fp[N:] + 1./theta_fp[N:]))
+	log_c4 = 0.5*np.sum(np.log(v_cav_g[:M] + 1./theta_g[:M])) + 0.5*np.sum((m_cav_g[:M] - eta_g[:M]/theta_g[:M])**2/(v_cav_g[:M] + 1./theta_g[:M]))
+
+	logZ = log_k1 + log_k2 + log_c1 + log_c2 + log_c3 + log_c4 +  f_term + g_term
+
+	# import pdb
+	# pdb.set_trace()
+	
+	return mu_f, Sigma_f, Sigma_full_f, mu_g, Sigma_g, Sigma_full_g, logZ
+
+def compute_marginal_likelihood_mvn(L, mu, Sigma, eta, theta):
+    
+    # eta_cav, theta_cav = mu/Sigma - eta_z, 1./Sigma - theta_z
+    # m_cav, v_cav = eta_cav/theta_cav, 1./theta_cav
+    b = np.linalg.solve(L, eta/np.sqrt(theta))
+
+    # log_s1 = np.sum(logphi(z.ravel()*m_cav[N:]/np.sqrt(1 + v_cav[N:])))
+    # log_s2 = 0.5*np.sum(np.log(v_cav[N:] + 1./theta_z[N:])) + 0.5*np.sum((m_cav[N:] - eta_z[N:]/theta_z[N:])**2/(v_cav[N:] + 1./theta_z[N:]))
+
+    logdet = np.sum(np.log(np.diag(L))) - np.sum(np.log(np.sqrt(theta)))
+    quadterm = 0.5*np.sum(b**2)
+
+    return -0.5*len(mu)*np.log(2*np.pi)  - logdet - quadterm
 
 
 def _predict(mu, Sigma_full, t, t2, t_pred, k1, k2):

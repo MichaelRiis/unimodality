@@ -308,12 +308,30 @@ def _predict(mu, Sigma_full, t, t2, t_pred, k1, k2):
 	pred_cov = Kpp -  np.dot(Kpf, H) + np.dot(H.T, np.dot(Sigma_full, H))
 	return pred_mean, pred_cov
 
-
-def predict(mu, Sigma_full, t, t2, t_pred, k1, k2):
+def predict(mu, Sigma_full, t, t2, t_pred, k1, k2, sigma2 = None):
 
 	pred_mean, pred_cov = _predict(mu, Sigma_full, t, t2, t_pred, k1, k2)
-	pred_var = np.diag(pred_cov)
+	pred_var_ = np.diag(pred_cov)
+
+	if sigma2 is None:
+		sigma2 = 0
+
+	pred_var = pred_var_ + sigma2
+
 	return pred_mean, pred_var
+
+def lppd(ytest, mu, Sigma_full, t, t2, t_pred, k1, k2, sigma2 = None, per_sample=False):
+	pred_mean, pred_var = predict(mu, Sigma_full, t, t2, t_pred, k1, k2, sigma2)
+
+	lppd = log_npdf(ytest.ravel(), pred_mean, pred_var)
+
+	if not per_sample:
+		lppd = np.sum(lppd)
+
+	return lppd
+
+
+
 
 
 def sample_z_probabilities(mu, Sigma_full, t, t2, t_pred, k1, k2, num_samples = 1000):

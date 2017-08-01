@@ -1,0 +1,151 @@
+\documentclass[10pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage[left=2cm,right=2cm,top=2cm,bottom=2cm]{geometry}
+\usepackage{bm}
+\usepackage[makeroom]{cancel}
+
+\begin{document}
+The joint model is given by
+
+\begin{align}
+	p(\bm{y}, \bm{f}, \bm{f}', \bm{z}) = \mathcal{N}\left(\bm{y}|\bm{f}, \sigma^2 \bm{I}\right)p(\bm{f}, \bm{f}')\prod_{i=1}^M \phi\left(z_i f'_i\right)
+\end{align}
+
+The marginal likelihood is given by
+
+\begin{align}
+	p(\bm{y}|\bm{z}) = \int\!\!\!\int \mathcal{N}\left(\bm{y}|\bm{f}, \sigma^2 \bm{I}\right)p(\bm{f}, \bm{f}')\prod_{i=1}^M \phi\left(z_i f'_i\right) \text{d}\bm{f}\text{d}\bm{f'}
+\end{align}
+
+The EP approximation
+
+\begin{align}
+	\ln Z_{\text{EP}} &= \ln \int\!\!\!\int \mathcal{N}\left(\bm{y}|\bm{f}, \sigma^2 \bm{I}\right)p(\bm{f}, \bm{f}')\prod_{i=1}^M s_i \mathcal{N}\left(\bm{f}'|\bm{m}, \bm{v} \right)\text{d}\bm{f}\text{d}\bm{f'}\\
+	%
+	&= \prod_{i=1}^M \ln s_i + \ln \int\!\!\!\int \mathcal{N}\left(\bm{y}|\bm{f}, \sigma^2 \bm{I}\right)\mathcal{N}\left(\begin{bmatrix}\bm{f}\\\bm{f}'\end{bmatrix}\big| \bm{0}, \bm{K}\right) \mathcal{N}\left(\bm{f}'|\bm{m}, \bm{v} \right)\text{d}\bm{f}\text{d}\bm{f'}\\
+	%
+	&= \prod_{i=1}^M \ln s_i + \ln \int\!\!\!\int \mathcal{N}\left(\bm{f}\big|\bm{y}, \sigma^2 \bm{I}\right)\mathcal{N}\left(\begin{bmatrix}\bm{f}\\\bm{f}'\end{bmatrix}\big| \bm{0}, \bm{K}\right) \mathcal{N}\left(\bm{f}'|\bm{m}, \bm{v} \right)\text{d}\bm{f}\text{d}\bm{f'}\\
+	%
+	&= \prod_{i=1}^M \ln s_i + \ln \int\!\!\!\int \mathcal{N}\left(\begin{bmatrix}\bm{f}\\\bm{f}'\end{bmatrix}\big|\begin{bmatrix}\bm{y}\\\bm{m}\end{bmatrix}, \begin{bmatrix}\sigma^2 \bm{I}&0\\0&\bm{v}\end{bmatrix}\right)\mathcal{N}\left(\begin{bmatrix}\bm{f}\\\bm{f}'\end{bmatrix}\big| \bm{0}, \bm{K}\right) \text{d}\bm{f}\text{d}\bm{f'}\\
+	%		
+	&= \prod_{i=1}^M \ln s_i + \ln \mathcal{N}\left(\bm{0}\big|\tilde{\bm{m}}, \bm{K} + \tilde{\bm{v}}\right)\\
+	%
+	&= \prod_{i=1}^M \ln s_i - \frac{N+M}{2}\ln\left(2\pi\right) - \frac{1}{2}\ln|\bm{K} + \tilde{\bm{v}}| - \frac12 \tilde{\bm{m}}^T \left(\bm{K} + \tilde{\bm{v}}\right)^{-1} \tilde{\bm{m}}
+\end{align}
+where $\tilde{\bm{m}} = \begin{bmatrix}\bm{y}\\\bm{m}\end{bmatrix}$ and $\tilde{\bm{v}}=\begin{bmatrix}\sigma^2 \bm{I}&0\\0&\bm{v}\end{bmatrix}$. Furthermore, the normalization constants $s_i$ are given by
+\begin{align}
+	\mathbb{E}_{Q_{-i}}\left[\phi\left(z_i f'_i\right)\right] &= s_i \mathbb{E}_{Q_{-i}}\left[\mathcal{N}\left(f_i|m_i, v_i\right)\right] \\
+	\iff &\nonumber\\
+	\ln s_i &= \ln \mathbb{E}_{Q_{-i}}\left[\phi\left(z_i f'_i\right)\right] - \ln \mathbb{E}_{Q_{-i}}\left[\mathcal{N}\left(f_i|m_i, v_i\right)\right]\\
+	%
+	&= \ln \phi\left(\frac{z_i m_{-i}}{\sqrt{1 + v_{-i}}}\right) - \ln \mathcal{N}\left(0|m_{-i} - m_i, v_{-i} + v_i\right)\\	
+	%
+	&= \ln \phi\left(\frac{z_i m_{-i}}{\sqrt{1 + v_{-i}}}\right) +\frac12 \ln2\pi + \frac12 \ln\left(v_{-i} + v_i\right) + \frac12\frac{(m_{-i} - m_i)^2}{v_{-i} + v_i} 
+\end{align}
+
+Substituting back yields
+\begin{align}
+	\ln Z_{\text{EP}} &=  \sum_{i=1}^M \ln \phi\left(\frac{z_i m_{-i}}{\sqrt{1 + v_{-i}}}\right) +\frac{M}{2} \ln2\pi + \frac12 \sum_{i=1}^M\ln\left(v_{-i} + v_i\right) + \frac12\sum_{i=1}^M\frac{(m_{-i} - m_i)^2}{v_{-i} + v_i} \nonumber\\
+	& - \frac{N+M}{2}\ln\left(2\pi\right) - \frac{1}{2}\ln|\bm{K} + \tilde{\bm{v}}| - \frac12 \tilde{\bm{m}}^T \left(\bm{K} + \tilde{\bm{v}}\right)^{-1} \tilde{\bm{m}}\\
+	%
+	&=  \sum_{i=1}^M \ln \phi\left(\frac{z_i m_{-i}}{\sqrt{1 + v_{-i}}}\right) + \frac12 \sum_{i=1}^M\ln\left(v_{-i} + v_i\right) + \frac12\sum_{i=1}^M\frac{(m_{-i} - m_i)^2}{v_{-i} + v_i} \nonumber\\
+	& - \frac{N}{2}\ln\left(2\pi\right) - \frac{1}{2}\ln|\bm{K} + \tilde{\bm{v}}| - \frac12 \tilde{\bm{m}}^T \left(\bm{K} + \tilde{\bm{v}}\right)^{-1} \tilde{\bm{m}}\\
+\end{align}
+
+\section*{Model for unimodal functions}
+\begin{align}
+p(\mathbf{y}, \mathbf{m}) &\propto \int \!\!\!\!\int \!\!\!\! \int \!\!\!\!\int \sum_{\mathbf{z}}\frac{1}{Z}\mathcal{N}\left(\textbf{y}|\mathbf{f}, \sigma^2 \mathbf{I}\right)p(\mathbf{f}, \mathbf{f}')\prod_{i=1}^M \phi\left(z_if_i'\right) \text{Ber}\left(z_i|\phi\left(g_i\right)\right)  p(\mathbf{g}, \mathbf{g}')\prod_{i=1}^M \phi\left(m_i g_i'\right) \text{d}\mathbf{f}\text{d}\mathbf{f}'\text{d}\mathbf{g}\text{d}\mathbf{g}'\\
+%
+&\propto \int \!\!\!\!\int \!\!\!\! \int \!\!\!\!\int \frac{1}{Z}\mathcal{N}\left(\textbf{y}|\mathbf{f}, \sigma^2 \mathbf{I}\right)p(\mathbf{f}, \mathbf{f}')\prod_{i=1}^M \left[\phi\left(-f_i'\right)(1-\phi(g_i)) + \phi\left(f_i'\right)\phi(g_i)\right]  p(\mathbf{g}, \mathbf{g}')\prod_{i=1}^M \phi\left(m_i g_i'\right) \text{d}\mathbf{f}\text{d}\mathbf{f}'\text{d}\mathbf{g}\text{d}\mathbf{g}'
+\end{align}
+
+
+Inserting site approximations
+
+\begin{align}
+p(\mathbf{y}, \mathbf{m}) &\propto \int \!\!\!\!\int \!\!\!\! \int \!\!\!\!\int \mathcal{N}\left(\textbf{y}|\mathbf{f}, \sigma^2 \mathbf{I}\right)p(\mathbf{f}, \mathbf{f}')\prod_{i=1}^M c_i\mathcal{N}\left(f_i'|m^f_i, v^f_i\right)\mathcal{N}\left(g_i|m^g_i, v^g_i\right)  p(\mathbf{g}, \mathbf{g}')\prod_{i=1}^M k_i \mathcal{N}\left(g_i'|\mu_i, \tau_i\right) \text{d}\mathbf{f}\text{d}\mathbf{f}'\text{d}\mathbf{g}\text{d}\mathbf{g}'
+\end{align}
+
+Thus,
+
+\begin{align}
+\ln Z_\text{EP} &\propto \sum_{i=1}^M \ln c_i + \sum_{i=1}^M \ln k_i\\
+& +  \ln  \int \!\!\!\!\int \mathcal{N}\left(\begin{bmatrix}\bm{f}\\\bm{f}'\end{bmatrix}\big| \bm{0}, \bm{K}_f\right)\mathcal{N}\left(\textbf{f}|\mathbf{y}, \sigma^2 \mathbf{I}\right)\mathcal{N}\left(\mathbf{f}'|\mathbf{m}^f, \mathbf{v}^f\right)  \text{d}\mathbf{f}\text{d}\mathbf{f}'\\
+& + \ln \int \!\!\!\!\int  \mathcal{N}\left(\begin{bmatrix}\bm{g}\\\bm{g}'\end{bmatrix}\big| \bm{0}, \bm{K}_g\right) \mathcal{N}\left(\mathbf{g}'|\bm{\mu}, \bm{\tau}\right) \mathcal{N}\left(\mathbf{g}|\mathbf{m}^g, \mathbf{v}^g\right) \text{d}\mathbf{g}\text{d}\mathbf{g}'
+\end{align}
+
+and
+
+\begin{align}
+\ln Z_\text{EP} &\propto \sum_{i=1}^M \ln c_i + \sum_{i=1}^M \ln k_i\\
+& +  \ln  \int \!\!\!\!\int \mathcal{N}\left(\begin{bmatrix}\bm{f}\\\bm{f}'\end{bmatrix}\big| \bm{0}, \bm{K}_f\right)\mathcal{N}\left(\begin{bmatrix}\bm{f}\\\bm{f}'\end{bmatrix}\big| \begin{bmatrix}\bm{y}\\ \mathbf{m}^f\end{bmatrix}, \begin{bmatrix}\sigma^2 \bm{I}&0\\0&\mathbf{v}^f\end{bmatrix}\right)  \text{d}\mathbf{f}\text{d}\mathbf{f}'\\
+& + \ln \int \!\!\!\!\int  \mathcal{N}\left(\begin{bmatrix}\bm{g}\\\bm{g}'\end{bmatrix}\big| \bm{0}, \bm{K}_g\right) \mathcal{N}\left(\begin{bmatrix}\bm{g}\\\bm{g}'\end{bmatrix}\big| \begin{bmatrix}\mathbf{m}^g\\\bm{\mu}  \end{bmatrix}, \begin{bmatrix}\mathbf{v}^g&0\\0&\bm{\tau}\end{bmatrix}\right) \text{d}\mathbf{g}\text{d}\mathbf{g}'
+\end{align}
+
+leading to
+
+\begin{align}
+\ln Z_\text{EP} &\propto \sum_{i=1}^M \ln c_i + \sum_{i=1}^M \ln k_i\\
+& +  \ln  \int \!\!\!\!\int \mathcal{N}\left(\begin{bmatrix}\bm{f}\\\bm{f}'\end{bmatrix}\big| \bm{0}, \bm{K}_f\right)\mathcal{N}\left(\begin{bmatrix}\bm{f}\\\bm{f}'\end{bmatrix}\big| \tilde{\mathbf{m}}^f, \tilde{\mathbf{V}}^f \right)  \text{d}\mathbf{f}\text{d}\mathbf{f}'\\
+& + \ln \int \!\!\!\!\int  \mathcal{N}\left(\begin{bmatrix}\bm{g}\\\bm{g}'\end{bmatrix}\big| \bm{0}, \bm{K}_g\right) \mathcal{N}\left(\begin{bmatrix}\bm{g}\\\bm{g}'\end{bmatrix}\big| \tilde{\mathbf{m}}^g, \tilde{\mathbf{V}}^g \right) \text{d}\mathbf{g}\text{d}\mathbf{g}'
+\end{align}
+
+where
+\begin{align}
+\tilde{\mathbf{m}}^f&= \begin{bmatrix}\bm{y}\\ \mathbf{m}^f\end{bmatrix} 	& \tilde{\mathbf{V}}^f &= \begin{bmatrix}\sigma^2 \bm{I}&0\\0&\mathbf{v}^f\end{bmatrix}\\
+\tilde{\mathbf{m}}^g &= \begin{bmatrix}\mathbf{m}^g\\\bm{\mu} \end{bmatrix} & \tilde{\mathbf{V}}^g &= \begin{bmatrix}\mathbf{v}^g&0\\0&\bm{\tau}\end{bmatrix} 
+\end{align}
+
+Finally, carrying out the integrals yields
+
+
+\begin{align}
+\ln Z_\text{EP} &\propto \sum_{i=1}^M \ln c_i + \sum_{i=1}^M \ln k_i +  \ln  \mathcal{N}\left( \bm{0} |  \tilde{\mathbf{m}}^f, \bm{K}_f + \tilde{\mathbf{V}}^f\right)  +  \ln  \mathcal{N}\left( \bm{0} |  \tilde{\mathbf{m}}^g, \bm{K}_g + \tilde{\mathbf{V}}^g\right)
+\end{align}
+
+ The normalization constants $k_i$ are given by
+\begin{align}
+	\mathbb{E}_{Q_{-i}}\left[\phi\left(m_i g'_i\right)\right] &= k_i \mathbb{E}_{Q_{-i}}\left[\mathcal{N}\left(g_i'|\mu_i, \tau_i\right)\right] \\
+	\iff &\nonumber\\
+	\ln k_i &= \ln \mathbb{E}_{Q_{-i}}\left[\phi\left(m_i g'_i\right)\right] - \ln \mathbb{E}_{Q_{-i}}\left[\mathcal{N}\left(g_i'|\mu_i, \tau_i\right)\right]\\
+	%
+	&= \ln \phi\left(\frac{m_i \mu_{-i}}{\sqrt{1 + \tau_{-i}}}\right) - \ln \mathcal{N}\left(0|\mu_{-i} - \mu_i, \tau_{-i} + \tau_i\right)\\	
+	%
+	&= \ln \phi\left(\frac{m_i \mu_{-i}}{\sqrt{1 + \tau_{-i}}}\right) +\frac12 \ln2\pi + \frac12 \ln\left(\tau_{-i} + \tau_i\right) + \frac12\frac{(\mu_{-i} - \mu_i)^2}{\tau_{-i} + \tau_i} 
+\end{align}
+
+
+ and the normalization constants $c_i$ are given by
+\begin{align}
+	&\mathbb{E}_{Q_{-i}}\left[\phi\left(-f_i'\right)(1-\phi(g_i)) + \phi\left(f_i'\right)\phi(g_i)\right] = c_i \mathbb{E}_{Q_{-i}}\left[\mathcal{N}\left(f_i'|m^f_i, v^f_i\right)\mathcal{N}\left(g_i|m^g_i, v^g_i\right)\right] \\
+	\iff &\nonumber\\
+	\ln c_i &= \ln \mathbb{E}_{Q_{-i}}\left[\phi\left(-f_i'\right)(1-\phi(g_i)) + \phi\left(f_i'\right)\phi(g_i)\right] - \ln \mathbb{E}_{Q_{-i}}\left[\mathcal{N}\left(f_i'|m^f_i, v^f_i\right)\mathcal{N}\left(g_i|m^g_i, v^g_i\right)\right]\\
+\end{align}
+
+Simplifying
+
+\begin{align}
+	\ln c_i &= \ln \mathbb{E}_{Q_{-i}}\left[\phi\left(-f_i'\right)\right] + \ln \mathbb{E}_{Q_{-i}}\left[\phi(-g_i)\right] + \ln \mathbb{E}_{Q_{-i}}\left[\phi\left(f_i'\right)\right] + \ln \mathbb{E}_{Q_{-i}}\left[ \phi(g_i)\right]\\
+	& - \ln \mathbb{E}_{Q_{-i}}\left[\mathcal{N}\left(f_i'|m^f_i, v^f_i\right)\right] - \ln \mathbb{E}_{Q_{-i}}\left[\mathcal{N}\left(g_i|m^g_i, v^g_i\right)\right]
+\end{align}
+
+Using the results from above
+
+\begin{align}
+	\ln c_i &= \ln \phi\left(\frac{-m^f_{-i}}{\sqrt{1 + v^f_{-i}}}\right) + \ln \phi\left(\frac{-m^g_{-i}}{\sqrt{1 + v^g_{-i}}}\right)  + \ln \phi\left(\frac{m^f_{-i}}{\sqrt{1 + v^f_{-i}}}\right) + \ln \phi\left(\frac{m^g_{-i}}{\sqrt{1 + v^g_{-i}}}\right) \\
+	& +\frac12 \ln2\pi + \frac12 \ln\left(v^f_{-i} + v^f_i\right) + \frac12\frac{(m^f_{-i} - m^f_i)^2}{v^f_{-i} + v^f_i}  \\
+	& +\frac12 \ln2\pi + \frac12 \ln\left(v^g_{-i} + v^g_i\right) + \frac12\frac{(m^g_{-i} - m^g_i)^2}{v^g_{-i} + v^g_i}
+\end{align}
+
+\section*{Delete me}
+
+\begin{align}
+	p(y, m) = p(y|m)p(m)
+\end{align}
+
+\end{document}

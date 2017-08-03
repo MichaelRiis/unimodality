@@ -3,6 +3,8 @@ import numpy as np
 from scipy.integrate import quad, dblquad
 from scipy.stats import norm
 
+from probit_moments import ProbitMoments
+
 npdf = lambda x, m, v: 1./np.sqrt(2*np.pi*v)*np.exp(-(x-m)**2/(2*v))
 log_npdf = lambda x, m, v: -0.5*np.log(2*np.pi*v) -(x-m)**2/(2*v)
 phi = lambda x: norm.cdf(x)
@@ -162,49 +164,22 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., al
 				continue
 
 			# compute moments
-			# tilted = lambda fp, g: ( phi(-fp)*(1- phi(g)) + phi(fp)*phi(g) )*npdf(fp, m_cav_fp, v_cav_fp)*npdf(g, m_cav_g, v_cav_g)
-
-			# lower_fp, upper_fp = m_cav_fp - 10*np.sqrt(v_cav_fp), m_cav_fp + 10*np.sqrt(v_cav_fp)
-			# lower_g, upper_g = lambda x: m_cav_g - 10*np.sqrt(v_cav_g), lambda x: m_cav_g + 10*np.sqrt(v_cav_g)
-
-			# Normalizer
-			#Z = dblquad(tilted, lower_fp, upper_fp, lower_g, upper_g)[0]
-
-			# first two moments wrt. fp
-			# site_fp_m = dblquad(lambda fp, g: fp*tilted(fp, g), lower_fp, upper_fp, lower_g, upper_g)[0]/Z
-			# site_fp_m2 = dblquad(lambda fp, g: fp**2*tilted(fp, g), lower_fp, upper_fp, lower_g, upper_g)[0]/Z
-
-			# first two moments wrt. g
-			# site_g_m = dblquad(lambda fp, g: g*tilted(fp, g), lower_fp, upper_fp, lower_g, upper_g)[0]/Z
-    # site_g_m2 = dblquad(lambda fp, g: g**2*tilted(fp, g), lower_fp, upper_fp, lower_g, upper_g)[0]/Z
-
-			z_fp, z_g = m_cav_fp/np.sqrt(1 + v_cav_fp), m_cav_g/np.sqrt(1 + v_cav_g)
-			Z_fp, Z_g = phi(z_fp), phi(z_g)
+			Z_fp, m1_fp, m2_fp = ProbitMoments.compute_moments(m=0, v=1, mu=m_cav_fp, sigma2=v_cav_fp, return_normalizer=True, normalized=False)
+			Z_g, m1_g, m2_g = ProbitMoments.compute_moments(m=0, v=1, mu=m_cav_g, sigma2=v_cav_g, return_normalizer=True, normalized=False)
 			Z = (1-Z_fp)*(1-Z_g) + Z_fp*Z_g
 
 			if Z == 0:
 				print('Z = 0 occured, skipping...')
 				continue
 
-			q_fp = Z_fp*m_cav_fp + v_cav_fp*npdf(z_fp, 0, 1)/np.sqrt(1 + v_cav_fp)
-			q_g = Z_g*m_cav_g + v_cav_g*npdf(z_g, 0, 1)/np.sqrt(1 + v_cav_g)
-
-			d, b = v_cav_fp*npdf(z_fp, 0, 1)/(Z_fp*np.sqrt(1 + v_cav_fp)), v_cav_fp**2*z_fp*npdf(z_fp, 0, 1)/(Z_fp*(1 + v_cav_fp))
-			q2_fp = Z_fp*(2*m_cav_fp*(m_cav_fp + d) + v_cav_fp - m_cav_fp**2 - b)
-
-			d, b = v_cav_g*npdf(z_g, 0, 1)/(Z_g*np.sqrt(1 + v_cav_g)), v_cav_g**2*z_g*npdf(z_g, 0, 1)/(Z_g*(1 + v_cav_g))
-			q2_g = Z_g*(2*m_cav_g*(m_cav_g + d) + v_cav_g - m_cav_g**2 - b)
-
-
-			site_fp_m = ((m_cav_fp-q_fp)*(1-Z_g) + q_fp*Z_g)/Z
-			site_fp_m2 = (((m_cav_fp**2 + v_cav_fp)-q2_fp)*(1-Z_g) + q2_fp*Z_g)/Z
-			site_g_m = ((1-Z_fp)*(m_cav_g-q_g) + Z_fp*q_g)/Z
-			site_g_m2 = ((1-Z_fp)*((m_cav_g**2 + v_cav_g)-q2_g) + q2_g*Z_fp)/Z
+			site_fp_m = ((m_cav_fp-m1_fp)*(1-Z_g) + m1_fp*Z_g)/Z
+			site_fp_m2 = (((m_cav_fp**2 + v_cav_fp)-m2_fp)*(1-Z_g) + m2_fp*Z_g)/Z
+			site_g_m = ((1-Z_fp)*(m_cav_g-m1_g) + Z_fp*m1_g)/Z
+			site_g_m2 = ((1-Z_fp)*((m_cav_g**2 + v_cav_g)-m2_g) + m2_g*Z_fp)/Z
 
 			# variances
 			site_fp_v = site_fp_m2 - site_fp_m**2
 			site_g_v = site_g_m2 - site_g_m**2
-
 
 			# new sites
 			new_eta_fp, new_theta_fp = site_fp_m/site_fp_v - eta_cav_fp, 1./site_fp_v - theta_cav_fp

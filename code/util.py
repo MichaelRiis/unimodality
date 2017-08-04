@@ -11,6 +11,6 @@ def plot_with_uncertainty(x, y, ystd=None, color='r', linestyle='-', fill=True, 
 		plt.plot(x, lower, color=color, alpha=0.5, linestyle=linestyle)
 		plt.plot(x, upper, color=color, alpha=0.5, linestyle=linestyle)
 
-	if fill:
-		plt.fill_between(x.ravel(), lower, upper, color=color, alpha=0.25, linestyle=linestyle)
+		if fill:
+			plt.fill_between(x.ravel(), lower, upper, color=color, alpha=0.25, linestyle=linestyle)
 

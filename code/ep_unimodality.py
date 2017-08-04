@@ -4,6 +4,7 @@ from scipy.integrate import quad, dblquad
 from scipy.stats import norm
 
 from probit_moments import ProbitMoments
+from moment_functions import compute_moments_softinformation, compute_moments_strict
 
 npdf = lambda x, m, v: 1./np.sqrt(2*np.pi*v)*np.exp(-(x-m)**2/(2*v))
 log_npdf = lambda x, m, v: -0.5*np.log(2*np.pi*v) -(x-m)**2/(2*v)
@@ -49,7 +50,9 @@ def update_posterior(K, eta, theta):
     return mu, Sigma, Sigma_full, L
 
 
-def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., alpha=0.9, tol=1e-4, verbose=0):
+def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., alpha=0.9, tol=1e-4, verbose=0, c1=None, c2=None, moment_function=None, seed=0):
+
+	np.random.seed(seed)
 
 	if t2 is None:
 		t2 = t.copy()
@@ -60,6 +63,17 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., al
 
 	if m is None:
 		m = np.ones(M)
+
+	# Hyperparameter for g
+	if c1 is None:
+		c1 = k1
+	if c2 is None:
+		c2 = k2
+
+	# moment function
+	if moment_function is None:
+		moment_function = compute_moments_strict
+
 
 
 	# sites for likelihood 
@@ -75,7 +89,7 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., al
 
 	# prepare kernels
 	Kf = generate_joint_derivative_kernel(t, t2, k1, k2)
-	Kg = generate_joint_derivative_kernel(t2, t2, k1, k2)
+	Kg = generate_joint_derivative_kernel(t2, t2, c1, c2)
 
 	# prepare global approximation
 	mu_f, Sigma_f, Sigma_full_f, Lf = update_posterior(Kf, eta_fp + eta_y, theta_fp + theta_y)
@@ -164,18 +178,20 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., al
 				continue
 
 			# compute moments
-			Z_fp, m1_fp, m2_fp = ProbitMoments.compute_moments(m=0, v=1, mu=m_cav_fp, sigma2=v_cav_fp, return_normalizer=True, normalized=False)
-			Z_g, m1_g, m2_g = ProbitMoments.compute_moments(m=0, v=1, mu=m_cav_g, sigma2=v_cav_g, return_normalizer=True, normalized=False)
-			Z = (1-Z_fp)*(1-Z_g) + Z_fp*Z_g
+			# Z_fp, m1_fp, m2_fp = ProbitMoments.compute_moments(m=0, v=1, mu=m_cav_fp, sigma2=v_cav_fp, return_normalizer=True, normalized=False)
+			# Z_g, m1_g, m2_g = ProbitMoments.compute_moments(m=0, v=1, mu=m_cav_g, sigma2=v_cav_g, return_normalizer=True, normalized=False)
+			# Z = (1-Z_fp)*(1-Z_g) + Z_fp*Z_g
 
-			if Z == 0:
+			# site_fp_m = ((m_cav_fp-m1_fp)*(1-Z_g) + m1_fp*Z_g)/Z
+			# site_fp_m2 = (((m_cav_fp**2 + v_cav_fp)-m2_fp)*(1-Z_g) + m2_fp*Z_g)/Z
+			# site_g_m = ((1-Z_fp)*(m_cav_g-m1_g) + Z_fp*m1_g)/Z
+			# site_g_m2 = ((1-Z_fp)*((m_cav_g**2 + v_cav_g)-m2_g) + m2_g*Z_fp)/Z
+
+			Z, site_fp_m, site_fp_m2, site_g_m, site_g_m2 = moment_function(m_cav_fp, v_cav_fp, m_cav_g, v_cav_g)
+
+			if Z == 0 or np.isnan(Z):
 				print('Z = 0 occured, skipping...')
 				continue
-
-			site_fp_m = ((m_cav_fp-m1_fp)*(1-Z_g) + m1_fp*Z_g)/Z
-			site_fp_m2 = (((m_cav_fp**2 + v_cav_fp)-m2_fp)*(1-Z_g) + m2_fp*Z_g)/Z
-			site_g_m = ((1-Z_fp)*(m_cav_g-m1_g) + Z_fp*m1_g)/Z
-			site_g_m2 = ((1-Z_fp)*((m_cav_g**2 + v_cav_g)-m2_g) + m2_g*Z_fp)/Z
 
 			# variances
 			site_fp_v = site_fp_m2 - site_fp_m**2
@@ -209,7 +225,7 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., al
 
 		# check for convergence
 		new_params = np.hstack((mu_f, Sigma_f, mu_g, Sigma_g))
-		if np.mean((new_params-old_params)**2)/np.mean(old_params**2) < tol:
+		if len(old_params) > 0 and np.mean((new_params-old_params)**2)/np.mean(old_params**2) < tol:
 			print('Converged in %d iterations' % (itt + 1))
 			break
 

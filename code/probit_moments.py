@@ -3,6 +3,7 @@ import numpy as np
 from scipy.stats import norm
 
 phi = lambda x: norm.cdf(x)
+logphi = lambda x: norm.logcdf(x)
 npdf = lambda x, m, v: 1./np.sqrt(2*np.pi*v)*np.exp(-(x-m)**2/(2*v))
 
 class ProbitMoments(object):
@@ -10,8 +11,11 @@ class ProbitMoments(object):
 		where Z is the normalization constant. """
 
 	@classmethod
-	def compute_normalization(cls, m, v, mu, sigma2):
-		return phi((mu - m)/(v*np.sqrt(1 + sigma2/v**2)))
+	def compute_normalization(cls, m, v, mu, sigma2, log=False):
+		if log:
+			return logphi((mu - m)/(v*np.sqrt(1 + sigma2/v**2)))
+		else:
+			return phi((mu - m)/(v*np.sqrt(1 + sigma2/v**2)))
 
 	@classmethod
 	def compute_mean_and_variance(cls, m, v, mu, sigma2, return_normalizer=False):

@@ -50,7 +50,7 @@ def update_posterior(K, eta, theta):
     return mu, Sigma, Sigma_full, L
 
 
-def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., alpha=0.9, tol=1e-4, verbose=0, c1=None, c2=None, moment_function=None, seed=0):
+def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu2 = 1., alpha=0.9, tol=1e-4, verbose=0, c1=None, c2=None, moment_function=None, seed=0):
 
 	np.random.seed(seed)
 
@@ -187,7 +187,7 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., al
 			# site_g_m = ((1-Z_fp)*(m_cav_g-m1_g) + Z_fp*m1_g)/Z
 			# site_g_m2 = ((1-Z_fp)*((m_cav_g**2 + v_cav_g)-m2_g) + m2_g*Z_fp)/Z
 
-			Z, site_fp_m, site_fp_m2, site_g_m, site_g_m2 = moment_function(m_cav_fp, v_cav_fp, m_cav_g, v_cav_g)
+			Z, site_fp_m, site_fp_m2, site_g_m, site_g_m2 = moment_function(m_cav_fp, v_cav_fp, m_cav_g, v_cav_g, nu2=nu2)
 
 			if Z == 0 or np.isnan(Z):
 				print('Z = 0 occured, skipping...')
@@ -250,7 +250,7 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., al
 	m_cav_fp, v_cav_fp = eta_cav_fp/theta_cav_fp, 1./theta_cav_fp
 	m_cav_g, v_cav_g = eta_cav_g/theta_cav_g, 1./theta_cav_g
 
-	log_c1 = np.sum(logphi(-m_cav_fp[N:]/np.sqrt(1 + v_cav_fp[N:]))) + np.sum(logphi(m_cav_fp[N:]/np.sqrt(1 + v_cav_fp[N:])))
+	log_c1 = np.sum(ProbitMoments.compute_normalization(m=0, v=-1./nu2, mu=m_cav_fp[N:], sigma2=v_cav_fp[N:], log=True)) + np.sum(ProbitMoments.compute_normalization(m=0, v=1./nu2, mu=m_cav_fp[N:], sigma2=v_cav_fp[N:], log=True))
 	log_c2 = np.sum(logphi(-m_cav_g[:M]/np.sqrt(1 + v_cav_g[:M]))) + np.sum(logphi(m_cav_g[:M]/np.sqrt(1 + v_cav_g[:M])))
 
 	log_c3 = 0.5*np.sum(np.log(v_cav_fp[N:] + 1./theta_fp[N:])) + 0.5*np.sum((m_cav_fp[N:] - eta_fp[N:]/theta_fp[N:])**2/(v_cav_fp[N:] + 1./theta_fp[N:]))

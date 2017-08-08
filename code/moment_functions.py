@@ -10,7 +10,7 @@ npdf = lambda x, m, v: 1./np.sqrt(2*np.pi*v)*np.exp(-(x-m)**2/(2*v))
 
 
 
-def compute_moments_softinformation(mf, vf, mg, vg, n_std=6):
+def compute_moments_softinformation(mf, vf, mg, vg, n_std=6, nu2 = 1.):
 
     def tilted_marginalized_f(g):
         """ Return m0, m1, m2 given by
@@ -21,7 +21,7 @@ def compute_moments_softinformation(mf, vf, mg, vg, n_std=6):
             
         """
         
-        k = 2*phi(g)-1
+        k = (2*phi(g)-1)*nu2
         z = k*mf/(np.sqrt(1 + vf*k**2))
         Z, nz = phi(z), npdf(z, 0, 1)
         
@@ -52,8 +52,8 @@ def compute_moments_softinformation(mf, vf, mg, vg, n_std=6):
     
 
 
-def compute_moments_strict(mf, vf, mg, vg):
-    Z_fp, m1_fp, m2_fp = ProbitMoments.compute_moments(m=0, v=1, mu=mf, sigma2=vf, return_normalizer=True, normalized=False)
+def compute_moments_strict(mf, vf, mg, vg, nu2 = 1.):
+    Z_fp, m1_fp, m2_fp = ProbitMoments.compute_moments(m=0, v=1./nu2, mu=mf, sigma2=vf, return_normalizer=True, normalized=False)
     Z_g, m1_g, m2_g = ProbitMoments.compute_moments(m=0, v=1, mu=mg, sigma2=vg, return_normalizer=True, normalized=False)
     Z = (1-Z_fp)*(1-Z_g) + Z_fp*Z_g
 

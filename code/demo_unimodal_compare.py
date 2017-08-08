@@ -19,12 +19,12 @@ import seaborn as snb
 np.random.seed(0)
 
 
-
 fs = [lambda x: -0.4*(norm.logpdf(x-2, 0, 1)) - 5,
 	  lambda x: -4*(tdist.logpdf(x+2, 1) + 2.8),
-	  lambda x: 0.66*(-6.47022e-01*x**0 + -3.70935e-14*x**1 + -2.60029e-02*x**2 + 6.82401e-15*x**3 + 4.40170e-02*x**4 + -2.76093e-16*x**5 + -1.57267e-03*x**6 + 2.97028e-18*x**7 + 1.60553e-05*x**8),	
-	  lambda x: 0.3*(x**2 - 25)*np.sin(x+0.5*np.pi),
-      lambda x: 5*np.sin(x+0.5*np.pi)]
+	  lambda x: -5 + 2*(0.66*(-6.47022e-01*x**0 + -3.70935e-14*x**1 + -2.60029e-02*x**2 + 6.82401e-15*x**3 + 4.40170e-02*x**4 + -2.76093e-16*x**5 + -1.57267e-03*x**6 + 2.97028e-18*x**7 + 1.60553e-05*x**8)),
+	  lambda x:  -5 + 2.5*(-1.45929831e-08*x**0 + 3.31816222e-13*x**1 + -9.56615498e-08*x**2 + 2.44466046e-12*x**3 + -5.48438817e-07*x**4 + 1.46685307e-11*x**5 + -2.42682792e-06*x**6 + 4.89700383e-11*x**7 + -5.78014004e-06*x**8 + -1.66086786e-10*x**9 + 6.61596215e-06*x**10 + 2.88098128e-11*x**11 + -6.72326260e-07*x**12 + -1.95886542e-12*x**13 + 2.81948116e-08*x**14 + 6.44453498e-14*x**15 + -5.79598733e-10*x**16 + -1.02589399e-15*x**17 + 5.65941071e-12*x**18 + 6.33251959e-18*x**19 + -2.00501280e-14*x**20),
+	  ]
+
 
 
 sigma2 = 5.
@@ -50,13 +50,13 @@ for idx in range(len(ys)):
 	print('\nLog Z (vanilla): %5.4f' % (-model.objective_function()))
 
 	# Fit model and predict with strict moments
-	mu_f_hard, Sigma_f_hard, Sigma_full_f_hard, mu_g_hard, Sigma_g_hard, Sigma_full_g_hard, logZ_hard = EP.ep_unimodality(t, y, k1, k2, sigma2, t2=t2, moment_function=compute_moments_strict, c1=c1, c2=c2)
+	mu_f_hard, Sigma_f_hard, Sigma_full_f_hard, mu_g_hard, Sigma_g_hard, Sigma_full_g_hard, logZ_hard = EP.ep_unimodality(t, y, k1, k2, sigma2, t2=t2, moment_function=compute_moments_strict, c1=c1, c2=c2, nu2=10)
 	mu_f_pred_hard, sigma_f_pred_hard = EP.predict(mu_f_hard, Sigma_full_f_hard, t, t2, t_pred, k1, k2)
 	mu_g_pred_hard, sigma_g_pred_hard = EP.predict(mu_g_hard, Sigma_full_g_hard, t2, t2, t_pred, k1, k2)
 	print('Log Z (unimoda-hard): %5.4f' % (logZ_hard))
 
 	# Fit model and predict with soft moments
-	mu_f_soft, Sigma_f_soft, Sigma_full_f_soft, mu_g_soft, Sigma_g_soft, Sigma_full_g_soft, logZ_soft = EP.ep_unimodality(t, y, k1, k2, sigma2, t2=t2, moment_function=compute_moments_softinformation, c1=c1, c2=c2)
+	mu_f_soft, Sigma_f_soft, Sigma_full_f_soft, mu_g_soft, Sigma_g_soft, Sigma_full_g_soft, logZ_soft = EP.ep_unimodality(t, y, k1, k2, sigma2, t2=t2, moment_function=compute_moments_softinformation, c1=c1, c2=c2, nu2=10)
 	mu_f_pred_soft, sigma_f_pred_soft = EP.predict(mu_f_soft, Sigma_full_f_soft, t, t2, t_pred, k1, k2)
 	mu_g_pred_soft, sigma_g_pred_soft = EP.predict(mu_g_soft, Sigma_full_g_soft, t2, t2, t_pred, k1, k2)
 	print('Log Z (unimoda-soft): %5.4f' % (logZ_soft))

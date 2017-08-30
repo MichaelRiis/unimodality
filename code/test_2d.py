@@ -26,19 +26,20 @@ Xp, Yp = np.meshgrid(xs, ys)
 XY = np.column_stack((Xp.ravel(), Yp.ravel()))
 
 # sample points
-sigma2 = 1.
-N = 25
+sigma2 = 1e-1
+N = 5
 X = np.random.normal(0, 3, size = (N, 2))
 y = f(X[:, 0], X[:, 1])[:, None] + np.random.normal(0, np.sqrt(sigma2), size=(N, 1))
 
 # generate test set
 Ntest = 1000
-Xtest = np.random.normal(0, 2.5, size = (Ntest, 2))
+Xtest = np.random.normal(0, 3.5, size = (Ntest, 2))
 ytest = f(Xtest[:, 0], Xtest[:, 1])[:, None] + np.random.normal(0, np.sqrt(sigma2), size=(Ntest, 1))
 
 # GP hyperparameters
 variance = 10
 lengthscale = 4
+k3 = 5.
 
 # Fit regular GP
 kernel = GPy.kern.RBF(input_dim=2, lengthscale=lengthscale, variance=variance)
@@ -54,19 +55,23 @@ else:
 	mu = np.zeros((len(xs), len(ys)))
 	var = variance*np.ones((len(xs), len(ys)))
 
+	log_npdf = lambda x, m, v: -0.5*np.log(2*np.pi*v) -(x-m)**2/(2*v)
+	gpy_lppd = np.mean(log_npdf(ytest, mu.ravel(), var.ravel() + sigma2))
+
+
 
 # Fit Unimodal GP
-M = 10
+M = 12
 x1 = np.linspace(-10, 10, M)
 x2 = np.linspace(-10, 10, M)
 X1, X2 = np.meshgrid(x1, x2)
 Xd = np.column_stack((X1.ravel(), X2.ravel()))
 
 
-mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf = ep.ep_unimodality(X, y, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2, t2=Xd, verbose=10, nu2=1.)
-mu_ep, var_ep = ep.predict(mu_f, Sigma_full_f, X, Xd, XY, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2)
-mu_ep_g1, var_ep_g1 = ep.predict(g_posterior_list[0][0], g_posterior_list[0][2], Xd, Xd, XY, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2)
-mu_ep_g2, var_ep_g2 = ep.predict(g_posterior_list[1][0], g_posterior_list[0][2], Xd, Xd, XY, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2)
+mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf = ep.ep_unimodality(X, y, k1=np.sqrt(variance), k2=lengthscale, k3=k3, sigma2=sigma2, t2=Xd, verbose=10, nu2=1.)
+mu_ep, var_ep = ep.predict(mu_f, Sigma_full_f, X, [Xd, Xd], XY, k1=np.sqrt(variance), k2=lengthscale, k3=k3, sigma2=sigma2)
+mu_ep_g1, var_ep_g1 = ep.predict(g_posterior_list[0][0], g_posterior_list[0][2], Xd, [Xd, None], XY, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2, f=False)
+mu_ep_g2, var_ep_g2 = ep.predict(g_posterior_list[1][0], g_posterior_list[0][2], Xd, [None, Xd], XY, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2, f=False)
 
 mu_ep = mu_ep.reshape((len(xs), len(ys)))
 var_ep = var_ep.reshape((len(xs), len(ys)))
@@ -76,7 +81,7 @@ mu_ep_g2 = mu_ep_g2.reshape((len(xs), len(ys)))
 var_ep_g1 = var_ep_g1.reshape((len(xs), len(ys)))
 var_ep_g2 = var_ep_g2.reshape((len(xs), len(ys)))
 
-unimodal_lppd = ep.lppd(ytest, mu_f, Sigma_full_f, X, Xd, Xtest, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2)
+unimodal_lppd = ep.lppd(ytest, mu_f, Sigma_full_f, X, [Xd, Xd], Xtest, k1=np.sqrt(variance), k2=lengthscale, k3=k3, sigma2=sigma2)
 
 
 

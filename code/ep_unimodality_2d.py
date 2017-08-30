@@ -27,7 +27,7 @@ def update_posterior(K, eta, theta):
     return mu, Sigma, Sigma_full, L
 
 
-def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu2 = 1., alpha=0.8, tol=1e-4, verbose=0, c1=None, c2=None, moment_function=None, seed=0):
+def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu2 = 1., alpha=0.8, tol=1e-4, verbose=0, c1=None, c2=None, moment_function=None, seed=0, k3=0):
 
     np.random.seed(seed)
 
@@ -38,7 +38,7 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
     N, D = t.shape
     M = len(t2)
     Df = N + D*M
-    Dg = M + D*M
+    Dg = M + M
 
     print(Df, Dg)
 
@@ -72,9 +72,12 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
 
     # # prepare kernels
     t_grad_list = [t2.copy() for i in range(D)]
-    Kf = generate_joint_derivative_kernel(t, t_grad_list, k1, k2)
+    Kf = generate_joint_derivative_kernel(t, t_grad_list, k1, k2, k3)
 
-    Kg = generate_joint_derivative_kernel(t2.copy(), t_grad_list, c1, c2)
+
+    t_grad_list1 = [t2.copy(), None]
+    t_grad_list2 = [None, t2.copy()]
+    Kg_list = [generate_joint_derivative_kernel(t2.copy(), t_grad_list_i, c1, c2) for t_grad_list_i in [t_grad_list1, t_grad_list2]]
 
 
     print('N: {}'.format(N))
@@ -83,12 +86,14 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
     print('N + D*M: {}'.format(N + D*M))
 
     print(Kf.shape)
-    print(Kg.shape)
+    for Kg in Kg_list:
+        print(Kg.shape)
+
 
 
     # prepare global approximation
     mu_f, Sigma_f, Sigma_full_f, Lf = update_posterior(Kf, eta_fp + eta_y, theta_fp + theta_y)
-    g_posterior_list = [update_posterior(Kg, eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d]) for d in range(D)]
+    g_posterior_list = [update_posterior(Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d]) for d in range(D)]
 
     for itt in range(max_itt):
 
@@ -103,7 +108,7 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
 
             mu_g, Sigma_g, Sigma_full_g, Lg = g_posterior_list[d]
 
-            j_list = np.random.choice(range(D*M), size=D*M, replace=False) if D*M > 0 else []
+            j_list = np.random.choice(range(M), size=M, replace=False) if M > 0 else []
             for j in j_list:
 
                 # print('Processing site for dim {} site {}'.format(d, j))
@@ -158,7 +163,7 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
                 eta_gp[d, i], theta_gp[d, i] = (1-alpha)*eta_gp[d, i] + alpha*new_eta, (1-alpha)*theta_gp[d, i] + alpha*new_theta
 
             # update joint
-            g_posterior_list[d] = update_posterior(Kg, eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d])
+            g_posterior_list[d] = update_posterior(Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d])
 
 
 
@@ -234,7 +239,7 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
 
             # update posterior
             mu_f, Sigma_f, Sigma_full_f, Lf = update_posterior(Kf, eta_fp + eta_y, theta_fp + theta_y)
-            g_posterior_list[d] = update_posterior(Kg, eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d])
+            g_posterior_list[d] = update_posterior(Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d])
 
       # check for convergence
         new_params = np.hstack((mu_f, Sigma_f)) # , mu_g, Sigma_g
@@ -291,7 +296,7 @@ def compute_marginal_likelihood_mvn(L, mu, Sigma, eta, theta):
     return -0.5*len(mu)*np.log(2*np.pi)  - logdet - quadterm
 
 
-def _predict(mu, Sigma_full, t, t2, t_pred, k1, k2):
+def _predict(mu, Sigma_full, t, t_grad_list, t_pred, k1, k2, k3, f=True):
     """ returns predictive mean and full covariance """
 
     # TODO: Need to be validated!
@@ -301,30 +306,45 @@ def _predict(mu, Sigma_full, t, t2, t_pred, k1, k2):
     # cov_fun1 = lambda x, y: -cov_fun(x,y)*(x-y)/k2**2
     # cov_fun2 = lambda x, y: cov_fun(x,y)*(1 - (x-y)**2/k2**2 )/k2**2
 
+    if k3 is None:
+        k3 = 0
+
+    M = None
+    for t_grad in t_grad_list:
+        if t_grad is not None:
+            M = len(t_grad)
 
     N, D = t.shape
-    M = len(t2)
-    Df = N + D*M
+    # M = 100#len(t2)
+    if f:
+        Df = N + D*M
+    else: 
+        Df = N + M
     P = t_pred.shape[0]
-
 
 
     # K = generate_joint_derivative_kernel(t, t2, k1, k2)
 
-    t_grad_list = [t2.copy() for i in range(t.shape[1])]
-    K = generate_joint_derivative_kernel(t, t_grad_list, k1, k2)
+    # t_grad_list = [t2.copy() for i in range(t.shape[1])]
+    K = generate_joint_derivative_kernel(t, t_grad_list, k1, k2, k3=k3)
 
     # TODO: Make more flexible
-    Ms = [len(t_grad) for t_grad in t_grad_list]
+    Ms = [len(t_grad) if t_grad is not None else 0 for t_grad in t_grad_list]
 
-    Kpp = cov_fun0(t_pred, t_pred.T, k1, k2)
+
+
+    Kpp = cov_fun0(t_pred, t_pred.T, k1, k2) + k3
 
     Kpf = np.zeros((P, Df))
-    Kpf[:, :N] = cov_fun0(t_pred, t.T, k1, k2)
+    Kpf[:, :N] = cov_fun0(t_pred, t.T, k1, k2) + k3
+
+    # import ipdb; ipdb.set_trace()
 
 
     offset = N
     for g in range(D):
+        if Ms[g] == 0:
+            continue
         Kpf[:P, offset:offset + Ms[g]] = cov_fun1(t_grad_list[g], t_pred, g, k1, k2).T
         offset += Ms[g]
 
@@ -334,9 +354,9 @@ def _predict(mu, Sigma_full, t, t2, t_pred, k1, k2):
     pred_cov = Kpp -  np.dot(Kpf, H) + np.dot(H.T, np.dot(Sigma_full, H))
     return pred_mean, pred_cov
 
-def predict(mu, Sigma_full, t, t2, t_pred, k1, k2, sigma2 = None):
+def predict(mu, Sigma_full, t, t2, t_pred, k1, k2, k3=None, sigma2 = None, f=True):
 
-    pred_mean, pred_cov = _predict(mu, Sigma_full, t, t2, t_pred, k1, k2)
+    pred_mean, pred_cov = _predict(mu, Sigma_full, t, t2, t_pred, k1, k2, k3, f)
     pred_var_ = np.diag(pred_cov)
 
     if sigma2 is None:
@@ -346,8 +366,9 @@ def predict(mu, Sigma_full, t, t2, t_pred, k1, k2, sigma2 = None):
 
     return pred_mean, pred_var
 
-def lppd(ytest, mu, Sigma_full, t, t2, t_pred, k1, k2, sigma2 = None, per_sample=False):
-    pred_mean, pred_var = predict(mu, Sigma_full, t, t2, t_pred, k1, k2, sigma2)
+def lppd(ytest, mu, Sigma_full, t, t2, t_pred, k1, k2, k3=None, sigma2 = None, per_sample=False):
+
+    pred_mean, pred_var = predict(mu, Sigma_full, t, t2, t_pred, k1, k2, k3, sigma2)
 
     lppd = log_npdf(ytest.ravel(), pred_mean, pred_var)
 

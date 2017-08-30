@@ -37,7 +37,7 @@ def cov_fun2(t2a, t2b, g, h, k1, k2):
 
 
 
-def generate_joint_derivative_kernel(t, t_grad_list, k1, k2, jitter = 1e-8):
+def generate_joint_derivative_kernel(t, t_grad_list, k1, k2, k3 = 0, jitter = 1e-8):
     """ 
         Generates SE kernel and its derivative kernels jointly
 
@@ -50,16 +50,18 @@ def generate_joint_derivative_kernel(t, t_grad_list, k1, k2, jitter = 1e-8):
 
     assert(t.ndim == 2), "Wrong dimensions for t"
     for index, t_grad in enumerate(t_grad_list):
-        assert(t_grad.ndim == 2), "Wrong dimensions for t grad %d" % index
-        assert(t.shape[1] == t_grad.shape[1]), "Dimensions for inputs of the partial derivative %d (%d x %d) do not match the dimensions for the inputs of the regular observations (%d x %d)" % (index, t_grad.shape[0], t_grad.shape[1], t.shape[0], t.shape[1])
+
+        if t_grad is not None:
+            assert(t_grad.ndim == 2), "Wrong dimensions for t grad %d. t grad has dim %d x %d" % (index, t_grad.shape[0], t_grad.shape[1])
+            assert(t.shape[1] == t_grad.shape[1]), "Dimensions for inputs of the partial derivative %d (%d x %d) do not match the dimensions for the inputs of the regular observations (%d x %d)" % (index, t_grad.shape[0], t_grad.shape[1], t.shape[0], t.shape[1])
 
         assert(t.shape[1] >= len(t_grad_list)), "Cant have more partial derivative than coordinates"
 
     # Dimensions
     N = len(t)
-    Ms = [len(t_grad) for t_grad in t_grad_list]
+    # Ms = [len(t_grad) for t_grad in t_grad_list]
+    Ms = [len(t_grad) if t_grad is not None else 0 for t_grad in t_grad_list]
     D = N + np.sum(Ms)
-
 
 
 
@@ -68,20 +70,31 @@ def generate_joint_derivative_kernel(t, t_grad_list, k1, k2, jitter = 1e-8):
     K = np.zeros((D, D))
 
     # Kernel for regular observations (within)
-    K[:N, :N] = cov_fun0(t, t.T, k1, k2)
+    K[:N, :N] = cov_fun0(t, t.T, k1, k2) + k3
 
     # Covariance between df/dx_g and f
     offset = N
-    for g in range(len(Ms)):
+    for g, M in enumerate(Ms):
+        if M == 0:
+            continue
+
         K[offset:offset + Ms[g], :N] = cov_fun1(t_grad_list[g], t, g, k1, k2)
         K[:N, offset:offset + Ms[g]] = K[offset:offset + Ms[g], :N].T
         offset += Ms[g]
 
     # Covariance between df/dx_g and df/dx_h
     offset_g = N
-    for g in range(len(Ms)):
+    for g, M in enumerate(Ms):
+        if M == 0:
+            continue
+
         offset_h = N
+
         for h in range(len(Ms)):
+
+            if Ms[h] == 0:
+                continue
+
             K[offset_g:offset_g + Ms[g], offset_h:offset_h + Ms[h]] = cov_fun2(t_grad_list[g], t_grad_list[h], g, h, k1, k2)
             offset_h += Ms[h]
 
@@ -97,7 +110,7 @@ def generate_joint_derivative_kernel(t, t_grad_list, k1, k2, jitter = 1e-8):
 if __name__ == "__main__":
 
 
-    np.random.seed(0)
+    np.random.seed(100)
 
     # Kernel hyperparameters
     k1, k2 = 2., 10.
@@ -128,6 +141,8 @@ if __name__ == "__main__":
     td = t1 - t0
     print('done in %4.3fs' % td)
 
+
+    print('Size of Kernel is {} x {}'.format(*K.shape))
 
     try:
 

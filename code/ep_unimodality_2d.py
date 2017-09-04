@@ -7,6 +7,7 @@ from probit_moments import ProbitMoments
 from moment_functions import compute_moments_softinformation, compute_moments_strict
 
 from derivative_kernels import generate_joint_derivative_kernel, cov_fun0, cov_fun1, cov_fun2
+import line_profiler
 
 npdf = lambda x, m, v: 1./np.sqrt(2*np.pi*v)*np.exp(-(x-m)**2/(2*v))
 log_npdf = lambda x, m, v: -0.5*np.log(2*np.pi*v) -(x-m)**2/(2*v)
@@ -26,7 +27,7 @@ def update_posterior(K, eta, theta):
 
     return mu, Sigma, Sigma_full, L
 
-
+@profile
 def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu2 = 1., alpha=0.8, tol=1e-4, verbose=0, c1=None, c2=None, moment_function=None, seed=0, k3=0):
 
     np.random.seed(seed)
@@ -75,9 +76,20 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
     Kf = generate_joint_derivative_kernel(t, t_grad_list, k1, k2, k3)
 
 
-    t_grad_list1 = [t2.copy(), None]
-    t_grad_list2 = [None, t2.copy()]
-    Kg_list = [generate_joint_derivative_kernel(t2.copy(), t_grad_list_i, c1, c2) for t_grad_list_i in [t_grad_list1, t_grad_list2]]
+    # t_grad_list1 = [t2.copy(), None, None]
+    # t_grad_list2 = [None, t2.copy(), None]
+    # t_grad_list3 = [None, None, t2.copy()]
+    # t_grad_list = [t_grad_list1, t_grad_list2, t_grad_list3]
+
+
+    t_grad_list = []
+    for d1 in range(D):
+        t_grad_list.append([t2.copy() if d2 is d1 else None for d2 in range(D)])
+# 
+    # import ipdb; ipdb.set_trace()
+
+
+    Kg_list = [generate_joint_derivative_kernel(t2.copy(), t_grad_list_i, c1, c2) for t_grad_list_i in t_grad_list]
 
 
     print('N: {}'.format(N))
@@ -238,8 +250,8 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
                 theta_g[d, j] = (1-alpha)*theta_g[d, j] + alpha*new_theta_g
 
             # update posterior
-            mu_f, Sigma_f, Sigma_full_f, Lf = update_posterior(Kf, eta_fp + eta_y, theta_fp + theta_y)
             g_posterior_list[d] = update_posterior(Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d])
+        mu_f, Sigma_f, Sigma_full_f, Lf = update_posterior(Kf, eta_fp + eta_y, theta_fp + theta_y)
 
       # check for convergence
         new_params = np.hstack((mu_f, Sigma_f)) # , mu_g, Sigma_g

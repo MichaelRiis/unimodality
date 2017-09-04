@@ -25,7 +25,7 @@ npdf = lambda x, m, v: 1./np.sqrt(2*np.pi*v)*np.exp(-(x-m)**2/(2*v))
 np.random.seed(1000)
 
 # dimension
-D = 3
+D = 4
 
 
 
@@ -49,7 +49,7 @@ f0 = f(mu)
 ####################################################################################################################################################3
 # Generate initial observations
 ####################################################################################################################################################3
-N = 50
+N = 100
 X = np.random.normal(0, 3, size = (N, D))
 
 sigma2 = 1e-1
@@ -68,19 +68,20 @@ ytest = f(Xtest)[:, None] + np.random.normal(0, np.sqrt(sigma2), size = (Ntest, 
 ####################################################################################################################################################3
 
 # Grid for prediction
-Q = 20
+Q = 12
 xs = np.linspace(-10, 10, Q)
 ys = np.linspace(-10, 10, Q)
 zs = np.linspace(-10, 10, Q)
-Xp, Yp, Zp = np.meshgrid(xs, ys, zs)
-XYZ = np.column_stack((Xp.ravel(), Yp.ravel(), Zp.ravel()))
+ws = np.linspace(-10, 10, Q)
+Xp, Yp, Zp, Wp = np.meshgrid(xs, ys, zs, ws)
+XYZ = np.column_stack((Xp.ravel(), Yp.ravel(), Zp.ravel(), Wp.ravel()))
 fp = f(XYZ)
 
 
 # Build kernel
 lengthscale = 10.
 variance = 10.
-rbf = GPy.kern.RBF(input_dim=3, lengthscale=lengthscale, variance=variance)
+rbf = GPy.kern.RBF(input_dim=D, lengthscale=lengthscale, variance=variance)
 
 
 # fit initial model
@@ -99,24 +100,25 @@ err_gpy = np.mean((fp.ravel() - mu_gpy.ravel())**2)/np.mean(fp.ravel()**2)
 ####################################################################################################################################################3
 
 # Fit Unimodal GP
-M = 7
+M = 5
 x1 = np.linspace(-10, 10, M)
 x2 = np.linspace(-10, 10, M)
 x3 = np.linspace(-10, 10, M)
-X1, X2, X3 = np.meshgrid(x1, x2, x3)
-Xd = np.column_stack((X1.ravel(), X2.ravel(), X3.ravel()))
+x4 = np.linspace(-10, 10, M)
+X1, X2, X3, X4 = np.meshgrid(x1, x2, x3, x4)
+Xd = np.column_stack((X1.ravel(), X2.ravel(), X3.ravel(), X4.ravel()))
 
 # fit initial model
 mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf = ep.ep_unimodality(X, y[:, None], k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2, t2=Xd, verbose=10, nu2=1.)
 
 # make predictions
-mu_ep, var_ep = ep.predict(mu_f, Sigma_full_f, X, [Xd, Xd, Xd], XYZ, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2)
+mu_ep, var_ep = ep.predict(mu_f, Sigma_full_f, X, [Xd, Xd, Xd, Xd], XYZ, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2)
 # mu_ep_g1, var_ep_g1 = ep.predict(g_posterior_list[0][0], g_posterior_list[0][2], Xd, [Xd, None, None], XYZ, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2, f=False)
 # mu_ep_g2, var_ep_g2 = ep.predict(g_posterior_list[1][0], g_posterior_list[0][2], Xd, [None, Xd, None], XYZ, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2, f=False)
 # mu_ep_g3, var_ep_g3 = ep.predict(g_posterior_list[2][0], g_posterior_list[0][2], Xd, [None, None, Xd], XYZ, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2, f=False)
 
 # evaluate
-lppd_uni = ep.lppd(ytest, mu_f, Sigma_full_f, X, [Xd, Xd, Xd], Xtest, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2)
+lppd_uni = ep.lppd(ytest, mu_f, Sigma_full_f, X, [Xd, Xd, Xd, Xd], Xtest, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2)
 err_uni = np.mean((fp.ravel() - mu_ep.ravel())**2)/np.mean(fp.ravel()**2)
 
 

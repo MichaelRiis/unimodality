@@ -352,9 +352,6 @@ def _predict(mu, Sigma_full, t, t_grad_list, t_pred, k1, k2, k3, f=True):
     Kpf = np.zeros((P, Df))
     Kpf[:, :N] = cov_fun0(t_pred, t.T, k1, k2) + k3
 
-    # import ipdb; ipdb.set_trace()
-
-
     offset = N
     for g in range(D):
         if Ms[g] == 0:

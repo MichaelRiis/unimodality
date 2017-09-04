@@ -1,5 +1,5 @@
 import numpy as np
-
+import time
 from scipy.integrate import quad, dblquad
 from scipy.stats import norm
 
@@ -7,7 +7,6 @@ from probit_moments import ProbitMoments
 from moment_functions import compute_moments_softinformation, compute_moments_strict
 
 from derivative_kernels import generate_joint_derivative_kernel, cov_fun0, cov_fun1, cov_fun2
-import line_profiler
 
 npdf = lambda x, m, v: 1./np.sqrt(2*np.pi*v)*np.exp(-(x-m)**2/(2*v))
 log_npdf = lambda x, m, v: -0.5*np.log(2*np.pi*v) -(x-m)**2/(2*v)
@@ -27,10 +26,10 @@ def update_posterior(K, eta, theta):
 
     return mu, Sigma, Sigma_full, L
 
-@profile
 def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu2 = 1., alpha=0.8, tol=1e-4, verbose=0, c1=None, c2=None, moment_function=None, seed=0, k3=0):
 
     np.random.seed(seed)
+    t0 = time.time()
 
     if t2 is None:
         t2 = t.copy()
@@ -256,7 +255,10 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
       # check for convergence
         new_params = np.hstack((mu_f, Sigma_f)) # , mu_g, Sigma_g
         if len(old_params) > 0 and np.mean((new_params-old_params)**2)/np.mean(old_params**2) < tol:
-            print('Converged in %d iterations' % (itt + 1))
+            run_time = time.time() - t0
+
+
+            print('Converged in %d iterations in %4.3fs' % (itt + 1, run_time))
             break
 
 

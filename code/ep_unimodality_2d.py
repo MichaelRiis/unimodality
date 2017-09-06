@@ -3,6 +3,9 @@ import time
 from scipy.integrate import quad, dblquad
 from scipy.stats import norm
 
+from scipy.misc import logsumexp
+
+
 from probit_moments import ProbitMoments
 from moment_functions import compute_moments_softinformation, compute_moments_strict
 
@@ -26,7 +29,7 @@ def update_posterior(K, eta, theta):
 
     return mu, Sigma, Sigma_full, L
 
-def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu2 = 1., alpha=0.8, tol=1e-4, verbose=0, c1=None, c2=None, moment_function=None, seed=0, k3=0):
+def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu2 = 1., alpha=0.9, tol=1e-4, verbose=0, c1=None, c2=None, moment_function=None, seed=0, k3=0):
 
     np.random.seed(seed)
     t0 = time.time()
@@ -64,11 +67,12 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
     eta_y[:N], theta_y[:N] = y[:, 0]/sigma2, 1./sigma2
 
     # sites connecting f' and g
-    eta_fp, theta_fp = np.zeros(Df), 1e-10*np.ones(Df)
-    eta_g, theta_g = np.array([np.zeros(Dg) for d in range(D)]), np.array([1e-10*np.ones(Dg) for d in range(D)])
+    initial_site_variance = 1e-16
+    eta_fp, theta_fp = np.zeros(Df), initial_site_variance*np.ones(Df)
+    eta_g, theta_g = np.array([np.zeros(Dg) for d in range(D)]), np.array([initial_site_variance*np.ones(Dg) for d in range(D)])
 
     # sites for g' and m
-    eta_gp, theta_gp =np.array([np.zeros(Dg) for d in range(D)]) , np.array([1e-10*np.ones(Dg) for d in range(D)])
+    eta_gp, theta_gp =np.array([np.zeros(Dg) for d in range(D)]) , np.array([initial_site_variance*np.ones(Dg) for d in range(D)])
 
     # # prepare kernels
     t_grad_list = [t2.copy() for i in range(D)]
@@ -85,10 +89,11 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
     for d1 in range(D):
         t_grad_list.append([t2.copy() if d2 is d1 else None for d2 in range(D)])
 # 
-    # import ipdb; ipdb.set_trace()
 
 
     Kg_list = [generate_joint_derivative_kernel(t2.copy(), t_grad_list_i, c1, c2) for t_grad_list_i in t_grad_list]
+
+
 
 
     print('N: {}'.format(N))
@@ -106,6 +111,7 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
     mu_f, Sigma_f, Sigma_full_f, Lf = update_posterior(Kf, eta_fp + eta_y, theta_fp + theta_y)
     g_posterior_list = [update_posterior(Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d]) for d in range(D)]
 
+
     for itt in range(max_itt):
 
         old_params = np.hstack((mu_f, Sigma_f)) # , mu_g, Sigma_g
@@ -122,8 +128,6 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
             j_list = np.random.choice(range(M), size=M, replace=False) if M > 0 else []
             for j in j_list:
 
-                # print('Processing site for dim {} site {}'.format(d, j))
-
                 # compute offset for gradient indices
                 i = M + j
 
@@ -132,32 +136,11 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
                 m_cav, v_cav = eta_cav/theta_cav, 1./theta_cav
 
                 if v_cav <= 0:
-                    # print('EP: Negative cavity observed at site %d in dim %d in iteration %d, skipping update' % (j, d, itt + 1))
+                    print('EP: Negative cavity observed at site %d in dim %d in iteration %d, skipping update' % (j, d, itt + 1))
                     continue
 
-                # Compute moments
-                # tilted = lambda x: phi(m[j]*nu*x)*npdf(x, m_cav, v_cav)
-                # lower, upper = m_cav - 6*np.sqrt(v_cav), m_cav + 6*np.sqrt(v_cav)
-                # Z = quad(tilted, lower, upper)[0]
-
-                    #       #site_m = quad(lambda x: x*tilted(x), lower, upper)[0]/Z
-                    #       #site_m2 = quad(lambda x: x**2*tilted(x), lower, upper)[0]/Z
-
-                s = m.ravel()[j]
-                mean, variance = s*nu*m_cav, (s*nu)**2*v_cav
-                z = mean/np.sqrt(1 + variance)
-
-                # Normalization            
-                Z = phi(z)
-
-                # First moment
-                qs = Z*m_cav + s*nu*v_cav*npdf(z, 0, 1)/np.sqrt(1 + variance)
-                site_m = qs/Z
-
-                # Second moment
-                r, b = s*nu*v_cav*npdf(z, 0, 1)/(Z*np.sqrt(1 + variance)), (s*nu)**2*v_cav**2*z*npdf(z, 0, 1)/(Z*(1 + variance))
-                q2s = Z*(2*m_cav*(m_cav + r) + v_cav - m_cav**2 - b)
-                site_m2 = q2s/Z
+                # compute moments
+                Z, site_m, site_m2 = ProbitMoments.compute_moments(m=0, v=1./(m.ravel()[j]*nu), mu=m_cav, sigma2=v_cav, return_normalizer=True, normalized=True)
 
                 # variance
                 site_v = site_m2 - site_m**2
@@ -166,9 +149,9 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
                 new_theta = 1./site_v - theta_cav
 
                 if new_theta < 0:
-                    new_theta = 1e-10
-                    new_variance = 1./(new_theta + theta_cav)
-                    new_eta = site_m/new_variance - eta_cav
+                    new_theta = 1e-6
+                    # new_variance = 1./(new_theta + theta_cav)
+                    # new_eta = site_m/new_variance - eta_cav
 
                 # update site
                 eta_gp[d, i], theta_gp[d, i] = (1-alpha)*eta_gp[d, i] + alpha*new_eta, (1-alpha)*theta_gp[d, i] + alpha*new_theta
@@ -179,8 +162,6 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
 
 
       # approximate constraints to enforce a single sign change for f'
-
-
         d_list = np.random.choice(range(D), size=D, replace=False)
         for d in d_list:
 
@@ -189,10 +170,6 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
             for j in j_list:
 
                 i = N + d*M +  j
-
-                # print('Processing contraints phi(f'' x g) for site {} in dim {}'.format(j, d))
-
-                # import ipdb; ipdb.set_trace()
 
                 # compute cavity
                 eta_cav_fp, theta_cav_fp = mu_f[i]/Sigma_f[i] - eta_fp[j], 1./Sigma_f[i] - theta_fp[j]
@@ -207,14 +184,14 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
                     continue
 
                 # compute moments
-                Z_fp, m1_fp, m2_fp = ProbitMoments.compute_moments(m=0, v=1, mu=m_cav_fp, sigma2=v_cav_fp, return_normalizer=True, normalized=False)
-                Z_g, m1_g, m2_g = ProbitMoments.compute_moments(m=0, v=1, mu=m_cav_g, sigma2=v_cav_g, return_normalizer=True, normalized=False)
-                Z = (1-Z_fp)*(1-Z_g) + Z_fp*Z_g
+                # Z_fp, m1_fp, m2_fp = ProbitMoments.compute_moments(m=0, v=1, mu=m_cav_fp, sigma2=v_cav_fp, return_normalizer=True, normalized=False)
+                # Z_g, m1_g, m2_g = ProbitMoments.compute_moments(m=0, v=1, mu=m_cav_g, sigma2=v_cav_g, return_normalizer=True, normalized=False)
+                # Z = (1-Z_fp)*(1-Z_g) + Z_fp*Z_g
 
-                site_fp_m = ((m_cav_fp-m1_fp)*(1-Z_g) + m1_fp*Z_g)/Z
-                site_fp_m2 = (((m_cav_fp**2 + v_cav_fp)-m2_fp)*(1-Z_g) + m2_fp*Z_g)/Z
-                site_g_m = ((1-Z_fp)*(m_cav_g-m1_g) + Z_fp*m1_g)/Z
-                site_g_m2 = ((1-Z_fp)*((m_cav_g**2 + v_cav_g)-m2_g) + m2_g*Z_fp)/Z
+                # site_fp_m = ((m_cav_fp-m1_fp)*(1-Z_g) + m1_fp*Z_g)/Z
+                # site_fp_m2 = (((m_cav_fp**2 + v_cav_fp)-m2_fp)*(1-Z_g) + m2_fp*Z_g)/Z
+                # site_g_m = ((1-Z_fp)*(m_cav_g-m1_g) + Z_fp*m1_g)/Z
+                # site_g_m2 = ((1-Z_fp)*((m_cav_g**2 + v_cav_g)-m2_g) + m2_g*Z_fp)/Z
 
                 Z, site_fp_m, site_fp_m2, site_g_m, site_g_m2 = moment_function(m_cav_fp, v_cav_fp, m_cav_g, v_cav_g, nu2=nu2)
 
@@ -232,13 +209,13 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
 
                 if new_theta_fp <= 0:
                     new_theta_fp = 1e-6
-                    new_variance_fp = 1./(new_theta_fp + theta_cav_fp)
-                    new_eta_fp = site_fp_m/new_variance_fp - eta_cav_fp
+                    # new_variance_fp = 1./(new_theta_fp + theta_cav_fp)
+                    # new_eta_fp = site_fp_m/new_variance_fp - eta_cav_fp
 
                 if new_theta_g <= 0:
                     new_theta_g = 1e-6
-                    new_variance_g = 1./(new_theta_g + theta_cav_g)
-                    new_eta_g = site_g_m/new_variance_g - eta_cav_g
+                    # new_variance_g = 1./(new_theta_g + theta_cav_g)
+                    # new_eta_g = site_g_m/new_variance_g - eta_cav_g
 
 
                 # update site
@@ -250,7 +227,7 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
 
             # update posterior
             g_posterior_list[d] = update_posterior(Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d])
-        mu_f, Sigma_f, Sigma_full_f, Lf = update_posterior(Kf, eta_fp + eta_y, theta_fp + theta_y)
+            mu_f, Sigma_f, Sigma_full_f, Lf = update_posterior(Kf, eta_fp + eta_y, theta_fp + theta_y)
 
       # check for convergence
         new_params = np.hstack((mu_f, Sigma_f)) # , mu_g, Sigma_g
@@ -263,48 +240,68 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
 
 
 
-    # # marginal likelihood
-    # f_term = compute_marginal_likelihood_mvn(Lf, mu_f, Sigma_full_f, eta_fp + eta_y, theta_fp + theta_y)
-    # g_term = compute_marginal_likelihood_mvn(Lg, mu_g, Sigma_full_g, eta_g + eta_gp, theta_g + theta_gp)
+    # marginal likelihood
+    f_term = compute_marginal_likelihood_mvn(Lf, mu_f, Sigma_full_f, eta_fp + eta_y, theta_fp + theta_y, skip_problematic=N)
+    g_terms = [compute_marginal_likelihood_mvn(Lg, mu_g, Sigma_full_g, eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d], skip_problematic=0)  for d, (mu_g, _, Sigma_full_g, Lg)in zip(range(D), g_posterior_list)]
 
-    # # log k_i
-    # eta_cav, theta_cav = mu_g/Sigma_g - eta_gp, 1./Sigma_g - theta_gp
-    # mu_cav, tau_cav = eta_cav/theta_cav, 1./theta_cav
+# 
+    # log k_i
+    # TODO: DOES NOT WORK FOR the CASE D > 1
+    mu_g, _, Sigma_full_g, Lg = g_posterior_list[0]
+    eta_cav, theta_cav = mu_g/Sigma_g - eta_gp, 1./Sigma_g - theta_gp
+    mu_cav, tau_cav = eta_cav/theta_cav, 1./theta_cav
 
-    # log_k1 = np.sum(logphi(m.ravel()*mu_cav[M:]/np.sqrt(1 + tau_cav[M:])))
-    # log_k2 = 0.5*np.sum(np.log(tau_cav[M:] + 1./theta_gp[M:])) + 0.5*np.sum((mu_cav[M:] - eta_gp[M:]/theta_gp[M:])**2/(tau_cav[M:] + 1./theta_gp[M:]))
+
+    log_k1 = np.sum(ProbitMoments.compute_normalization(m=0, v=1./(nu*m), mu=mu_cav[:, M:], sigma2= tau_cav[:, M:], log=True))
+    log_k2_prob = 0*0.5*np.sum(-np.log(theta_gp[:, M:]))
+    log_k2 = log_k2_prob + 0.5*np.sum(np.log(tau_cav[:, M:]*theta_gp[:, M:] + 1)) + 0.5*np.sum((mu_cav[:, M:] - eta_gp[:, M:]/theta_gp[:, M:])**2/(tau_cav[:, M:] + 1./theta_gp[:, M:]))
 
 
-    # # log c_i
-    # eta_cav_fp, theta_cav_fp = mu_f/Sigma_f - eta_fp, 1./Sigma_f - theta_fp
-    # eta_cav_g, theta_cav_g = mu_g/Sigma_g - eta_g, 1./Sigma_g - theta_g
+    # log c_i
+    eta_cav_fp, theta_cav_fp = mu_f/Sigma_f - eta_fp, 1./Sigma_f - theta_fp
+    eta_cav_g, theta_cav_g = mu_g/Sigma_g - eta_g, 1./Sigma_g - theta_g
+    m_cav_fp, v_cav_fp = eta_cav_fp/theta_cav_fp, 1./theta_cav_fp
+    m_cav_g, v_cav_g = eta_cav_g/theta_cav_g, 1./theta_cav_g
 
-    # m_cav_fp, v_cav_fp = eta_cav_fp/theta_cav_fp, 1./theta_cav_fp
-    # m_cav_g, v_cav_g = eta_cav_g/theta_cav_g, 1./theta_cav_g
 
-    # log_c1 = np.sum(ProbitMoments.compute_normalization(m=0, v=-1./nu2, mu=m_cav_fp[N:], sigma2=v_cav_fp[N:], log=True)) + np.sum(ProbitMoments.compute_normalization(m=0, v=1./nu2, mu=m_cav_fp[N:], sigma2=v_cav_fp[N:], log=True))
-    # log_c2 = np.sum(logphi(-m_cav_g[:M]/np.sqrt(1 + v_cav_g[:M]))) + np.sum(logphi(m_cav_g[:M]/np.sqrt(1 + v_cav_g[:M])))
+    # compute expectation of mixture site wrt. cavity
+    log_A1 = ProbitMoments.compute_normalization(m=0, v=-1./nu2, mu=m_cav_fp[N:], sigma2=v_cav_fp[N:], log=True)
+    log_A2 = ProbitMoments.compute_normalization(m=0, v=-1, mu=m_cav_g[:, :M], sigma2=v_cav_g[:, :M], log=True)
+    log_A3 = ProbitMoments.compute_normalization(m=0, v=1./nu2, mu=m_cav_fp[N:], sigma2=v_cav_fp[N:], log=True)
+    log_A4 = ProbitMoments.compute_normalization(m=0, v=1., mu=m_cav_g[:, :M], sigma2=v_cav_g[:, :M], log=True)
 
-    # log_c3 = 0.5*np.sum(np.log(v_cav_fp[N:] + 1./theta_fp[N:])) + 0.5*np.sum((m_cav_fp[N:] - eta_fp[N:]/theta_fp[N:])**2/(v_cav_fp[N:] + 1./theta_fp[N:]))
-    # log_c4 = 0.5*np.sum(np.log(v_cav_g[:M] + 1./theta_g[:M])) + 0.5*np.sum((m_cav_g[:M] - eta_g[:M]/theta_g[:M])**2/(v_cav_g[:M] + 1./theta_g[:M]))
+    log_c1, log_c2 = np.sum(logsumexp(np.row_stack((log_A1 + log_A2, log_A3 + log_A4)), axis = 0, keepdims=True)), 0
+ 
+    # problematic terms
+    log_c3_prob = 0*0.5*np.sum(-np.log(theta_fp[N:]))
+    log_c4_prob = 0*0.5*np.sum(-np.log(theta_g[:, :M]))
 
-    logZ = 0 #log_k1 + log_k2 + log_c1 + log_c2 + log_c3 + log_c4 +  f_term + g_term
+    log_c3 = log_c3_prob + 0.5*np.sum(np.log(v_cav_fp[N:]*theta_fp[N:] +1)) + 0.5*np.sum((m_cav_fp[N:] - eta_fp[N:]/theta_fp[N:])**2/(v_cav_fp[N:] + 1./theta_fp[N:]))
+    log_c4 = log_c4_prob + 0.5*np.sum(np.log(v_cav_g[:, :M]*theta_g[:, :M] + 1)) + 0.5*np.sum((m_cav_g[:, :M] - eta_g[:, :M]/theta_g[:, :M])**2/(v_cav_g[:, :M] + 1./theta_g[:, :M]))
 
-    # import ipdb
-    # ipdb.set_trace()
+    logZ = log_k1 + log_k2 + log_c1 + log_c2 + log_c3 + log_c4 +  f_term + np.sum(g_terms)
+    print('Log Z: %6.5f' % logZ)
+
+# 
+    # import ipdb; ipdb.set_trace()
+# 
+
+
+    return mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf, logZ #, mu_g, Sigma_g, Sigma_full_g, logZ
+
+def compute_marginal_likelihood_mvn(L, mu, Sigma, eta, theta, skip_problematic=None):
     
-    return mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf #, mu_g, Sigma_g, Sigma_full_g, logZ
-
-def compute_marginal_likelihood_mvn(L, mu, Sigma, eta, theta):
-    
-    # eta_cav, theta_cav = mu/Sigma - eta_z, 1./Sigma - theta_z
-    # m_cav, v_cav = eta_cav/theta_cav, 1./theta_cav
     b = np.linalg.solve(L, eta/np.sqrt(theta))
 
-    # log_s1 = np.sum(logphi(z.ravel()*m_cav[N:]/np.sqrt(1 + v_cav[N:])))
-    # log_s2 = 0.5*np.sum(np.log(v_cav[N:] + 1./theta_z[N:])) + 0.5*np.sum((m_cav[N:] - eta_z[N:]/theta_z[N:])**2/(v_cav[N:] + 1./theta_z[N:]))
+    # skip problematic term that will cancel out later?
+    if skip_problematic is None:
+        problematic_term = - np.sum(np.log(np.sqrt(theta)))
+    elif skip_problematic == 0:
+        problematic_term = 0
+    elif skip_problematic > 0:
+        problematic_term = - np.sum(np.log(np.sqrt(theta[:skip_problematic])))
 
-    logdet = np.sum(np.log(np.diag(L))) - np.sum(np.log(np.sqrt(theta)))
+    logdet = np.sum(np.log(np.diag(L))) + problematic_term
     quadterm = 0.5*np.sum(b**2)
 
     return -0.5*len(mu)*np.log(2*np.pi)  - logdet - quadterm

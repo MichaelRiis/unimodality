@@ -2,19 +2,22 @@ import numpy as np
 import time
 from scipy.integrate import quad, dblquad
 from scipy.stats import norm
-
 from scipy.misc import logsumexp
+
+import GPy
 
 
 from probit_moments import ProbitMoments
 from moment_functions import compute_moments_softinformation, compute_moments_strict
 
 from derivative_kernels import generate_joint_derivative_kernel, cov_fun0, cov_fun1, cov_fun2
+from util import mult_diag
 
 npdf = lambda x, m, v: 1./np.sqrt(2*np.pi*v)*np.exp(-(x-m)**2/(2*v))
 log_npdf = lambda x, m, v: -0.5*np.log(2*np.pi*v) -(x-m)**2/(2*v)
 phi = lambda x: norm.cdf(x)
 logphi = lambda x: norm.logcdf(x)
+
 
 
 def update_posterior(K, eta, theta):
@@ -29,7 +32,7 @@ def update_posterior(K, eta, theta):
 
     return mu, Sigma, Sigma_full, L
 
-def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu2 = 1., alpha=0.9, tol=1e-4, verbose=0, c1=None, c2=None, moment_function=None, seed=0, k3=0):
+def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu2 = 1., alpha=0.9, tol=1e-4, verbose=0, c1=None, c2=None, c3=0, moment_function=None, seed=0, k3=0):
 
     np.random.seed(seed)
     t0 = time.time()
@@ -43,12 +46,12 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
     Df = N + D*M
     Dg = M + M
 
-    print(Df, Dg)
+    # print(Df, Dg)
 
     if m is None:
         m = np.ones((D, M))
 
-    print('Number of derivative points per dim: {}'.format(M))
+    # print('Number of derivative points per dim: {}'.format(M))
 
     # Hyperparameter for g
     if c1 is None:
@@ -79,6 +82,8 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
     Kf = generate_joint_derivative_kernel(t, t_grad_list, k1, k2, k3)
 
 
+
+
     # t_grad_list1 = [t2.copy(), None, None]
     # t_grad_list2 = [None, t2.copy(), None]
     # t_grad_list3 = [None, None, t2.copy()]
@@ -91,19 +96,19 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
 # 
 
 
-    Kg_list = [generate_joint_derivative_kernel(t2.copy(), t_grad_list_i, c1, c2) for t_grad_list_i in t_grad_list]
+    Kg_list = [generate_joint_derivative_kernel(t2.copy(), t_grad_list_i, c1, c2, c3) for t_grad_list_i in t_grad_list]
 
 
 
 
-    print('N: {}'.format(N))
-    print('M: {}'.format(M))
-    print('D: {}'.format(D))
-    print('N + D*M: {}'.format(N + D*M))
+    # print('N: {}'.format(N))
+    # print('M: {}'.format(M))
+    # print('D: {}'.format(D))
+    # print('N + D*M: {}'.format(N + D*M))
 
-    print(Kf.shape)
-    for Kg in Kg_list:
-        print(Kg.shape)
+    # print(Kf.shape)
+    # for Kg in Kg_list:
+    #     print(Kg.shape)
 
 
 
@@ -150,8 +155,8 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
 
                 if new_theta < 0:
                     new_theta = 1e-6
-                    # new_variance = 1./(new_theta + theta_cav)
-                    # new_eta = site_m/new_variance - eta_cav
+                    new_variance = 1./(new_theta + theta_cav)
+                    new_eta = site_m/new_variance - eta_cav
 
                 # update site
                 eta_gp[d, i], theta_gp[d, i] = (1-alpha)*eta_gp[d, i] + alpha*new_eta, (1-alpha)*theta_gp[d, i] + alpha*new_theta
@@ -209,13 +214,13 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
 
                 if new_theta_fp <= 0:
                     new_theta_fp = 1e-6
-                    # new_variance_fp = 1./(new_theta_fp + theta_cav_fp)
-                    # new_eta_fp = site_fp_m/new_variance_fp - eta_cav_fp
+                    new_variance_fp = 1./(new_theta_fp + theta_cav_fp)
+                    new_eta_fp = site_fp_m/new_variance_fp - eta_cav_fp
 
                 if new_theta_g <= 0:
                     new_theta_g = 1e-6
-                    # new_variance_g = 1./(new_theta_g + theta_cav_g)
-                    # new_eta_g = site_g_m/new_variance_g - eta_cav_g
+                    new_variance_g = 1./(new_theta_g + theta_cav_g)
+                    new_eta_g = site_g_m/new_variance_g - eta_cav_g
 
 
                 # update site
@@ -234,8 +239,8 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
         if len(old_params) > 0 and np.mean((new_params-old_params)**2)/np.mean(old_params**2) < tol:
             run_time = time.time() - t0
 
-
-            print('Converged in %d iterations in %4.3fs' % (itt + 1, run_time))
+            if verbose > 0:
+                print('Converged in %d iterations in %4.3fs' % (itt + 1, run_time))
             break
 
 
@@ -283,11 +288,60 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
     print('Log Z: %6.5f' % logZ)
 
 # 
-    # import ipdb; ipdb.set_trace()
 # 
+    # gradients
+    def compute_dl_DK(K, eta, theta, prior_mean = 0):
+        sqrt_theta = np.sqrt(theta)
+        C0_scaled = mult_diag(sqrt_theta, K, left=True)
+        prior_gamma_B = np.identity(len(K)) + mult_diag(sqrt_theta, C0_scaled, left=False)
+        # prior_gamma_B_chol = np.linalg.cholesky(prior_gamma_B)
+
+        b = sqrt_theta*np.linalg.solve(prior_gamma_B, sqrt_theta*(prior_mean - eta/theta))
+        
+        return np.outer(b, b) - mult_diag(sqrt_theta, np.linalg.solve(prior_gamma_B, np.diag(sqrt_theta)), left=True)
+
+    dL_dK_f = compute_dl_DK(Kf, eta_fp + eta_y, theta_fp + theta_y)
+    d = 0
+    dL_dK_g = compute_dl_DK(Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d])
+#     vec1, vec2 = np.linalg.solve(prior_gamma_B_chol, s), np.linalg.solve(prior_gamma_B_chol, ep_params.gamma_sites.eta[:, t]/s)
+
+#     gradients[0] += -0.5*np.trace(np.dot(R, jac_variance))*self.variance
+#     gradients[1] += -0.5*np.trace(np.dot(R, jac_scale))*self.lengthscale
+#     gradients[2] += -0.5*np.trace(np.dot(R, jac_bias))*self.bias
 
 
-    return mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf, logZ #, mu_g, Sigma_g, Sigma_full_g, logZ
+
+    # compute derivative of kernel wrt hyperparameters
+    # f
+    se = GPy.kern.RBF(input_dim = 1, lengthscale=k2, variance=k1**2) + GPy.kern.Bias(input_dim=1, variance=k3**2)
+    se_der = GPy.kern.DiffKern(se, 0)
+    X1,Y1, output_index = GPy.util.multioutput.build_XY([t, t2],[None, None])
+    Kf_kernel = GPy.kern.MultioutputKern(kernels=[se, se_der], cross_covariances={})
+    Kf_kernel.update_gradients_full(dL_dK_f, X1)
+
+    # map gradients to log domain
+    grad_f = Kf_kernel.gradient*Kf_kernel.param_array
+
+
+    # g
+    se_g = GPy.kern.RBF(input_dim = 1, lengthscale=c2, variance=c1**2)
+    se_g_der = GPy.kern.DiffKern(se_g, 0)
+    X2,Y2, output_index = GPy.util.multioutput.build_XY([t2, t2],[None, None])
+
+
+    Kg_kernel = GPy.kern.MultioutputKern(kernels=[se_g, se_g_der], cross_covariances={})
+    Kg_kernel.update_gradients_full(dL_dK_g, X2)
+    grad_g = Kg_kernel.gradient*Kg_kernel.param_array
+
+    # print(Kf_kernel)
+    # print(Kg_kernel)
+    # import ipdb; ipdb.set_trace()
+
+
+
+    grad = np.hstack((grad_f, grad_g))
+
+    return mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf, logZ, grad #, mu_g, Sigma_g, Sigma_full_g, logZ
 
 def compute_marginal_likelihood_mvn(L, mu, Sigma, eta, theta, skip_problematic=None):
     
@@ -389,16 +443,17 @@ def lppd(ytest, mu, Sigma_full, t, t2, t_pred, k1, k2, k3=None, sigma2 = None, p
 
 
 
-def sample_z_probabilities(mu, Sigma_full, t, t2, t_pred, k1, k2, num_samples = 1000):
+def sample_z_probabilities(mu, Sigma_full, t, t2, t_pred, c1, c2, c3=0, num_samples = 1000):
 
 
-    pred_mean, pred_cov = _predict(mu, Sigma_full, t, t2, t_pred, k1, k2)
+    pred_mean, pred_cov = _predict(mu, Sigma_full, t, t2, t_pred, c1, c2, c3)
     D = pred_cov.shape[0]
 
-    L = np.linalg.cholesky(pred_cov + 1e-8*np.identity(D)) 
+    L = np.linalg.cholesky(pred_cov + 1e-6*np.identity(D)) 
 
     zs = pred_mean[:, None] + np.dot(L, np.random.normal(0, 1, size=(D, num_samples)))
     pzs = phi(zs)
 
     return np.mean(pzs, axis = 1), np.var(pzs, axis = 1)
+
 

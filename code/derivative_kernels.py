@@ -70,7 +70,7 @@ def generate_joint_derivative_kernel(t, t_grad_list, k1, k2, k3 = 0, jitter = 1e
     K = np.zeros((D, D))
 
     # Kernel for regular observations (within)
-    K[:N, :N] = cov_fun0(t, t.T, k1, k2) + k3
+    K[:N, :N] = cov_fun0(t, t.T, k1, k2) + k3**2
 
     # Covariance between df/dx_g and f
     offset = N

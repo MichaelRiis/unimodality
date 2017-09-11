@@ -285,7 +285,6 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
     log_c4 = log_c4_prob + 0.5*np.sum(np.log(v_cav_g[:, :M]*theta_g[:, :M] + 1)) + 0.5*np.sum((m_cav_g[:, :M] - eta_g[:, :M]/theta_g[:, :M])**2/(v_cav_g[:, :M] + 1./theta_g[:, :M]))
 
     logZ = log_k1 + log_k2 + log_c1 + log_c2 + log_c3 + log_c4 +  f_term + np.sum(g_terms)
-    print('Log Z: %6.5f' % logZ)
 
 # 
 # 
@@ -311,37 +310,72 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
 
 
 
-    # compute derivative of kernel wrt hyperparameters
-    # f
+    #############################################################################3
+    # hadle gradients for f
+    #############################################################################3
     se = GPy.kern.RBF(input_dim = 1, lengthscale=k2, variance=k1**2) + GPy.kern.Bias(input_dim=1, variance=k3**2)
     se_der = GPy.kern.DiffKern(se, 0)
     X1,Y1, output_index = GPy.util.multioutput.build_XY([t, t2],[None, None])
     Kf_kernel = GPy.kern.MultioutputKern(kernels=[se, se_der], cross_covariances={})
+    
+
+
+
+     # priors
+    Kf_kernel.parameters[0].parameters[0].variance.unconstrain()
+    Kf_kernel.parameters[0].parameters[0].variance.set_prior(GPy.priors.StudentT(mu=0, sigma=1, nu=4))
+    Kf_kernel.parameters[0].parameters[0].variance.constrain_positive()
+
+    Kf_kernel.parameters[0].parameters[1].variance.unconstrain()
+    Kf_kernel.parameters[0].parameters[1].variance.set_prior(GPy.priors.StudentT(mu=0, sigma=1, nu=4))
+    Kf_kernel.parameters[0].parameters[1].variance.constrain_positive()
+
+
+
     Kf_kernel.update_gradients_full(dL_dK_f, X1)
 
-    # map gradients to log domain
-    grad_f = Kf_kernel.gradient*Kf_kernel.param_array
+    grad_f = Kf_kernel.gradient + Kf_kernel._log_prior_gradients()
 
 
-    # g
+    #############################################################################3
+    # hadle gradients for g
+    #############################################################################3
     se_g = GPy.kern.RBF(input_dim = 1, lengthscale=c2, variance=c1**2)
     se_g_der = GPy.kern.DiffKern(se_g, 0)
-    X2,Y2, output_index = GPy.util.multioutput.build_XY([t2, t2],[None, None])
+    X2,Y2, output_index = GPy.util.multioutput.build_XY([t2, t2],[np.zeros((M, 1)), np.zeros((M, 1))])
 
 
     Kg_kernel = GPy.kern.MultioutputKern(kernels=[se_g, se_g_der], cross_covariances={})
+
+    # priors
+    Kg_kernel.parameters[0].variance.unconstrain()
+    Kg_kernel.parameters[0].variance.set_prior(GPy.priors.StudentT(mu=0, sigma=1, nu=4))
+    Kg_kernel.parameters[0].variance.constrain_positive()
+
+    # compute gradient for g in parameter space
     Kg_kernel.update_gradients_full(dL_dK_g, X2)
-    grad_g = Kg_kernel.gradient*Kg_kernel.param_array
+    grad_g = Kg_kernel.gradient + Kg_kernel._log_prior_gradients()
 
-    # print(Kf_kernel)
-    # print(Kg_kernel)
+
+    #  add prior contribution
+    log_prior = Kg_kernel.log_prior() + Kf_kernel.log_prior()
+    log_posterior = log_prior + logZ
+    print('Log posterior: %4.3f' % log_posterior)
+    print('\tlog prior: %4.3f' % log_prior)
+    print('\tlog lik: %4.3f\n' % logZ)
+
+
+    # print('Log Z: %6.5f' % logZ)
+
+
+
+# 
     # import ipdb; ipdb.set_trace()
-
 
 
     grad = np.hstack((grad_f, grad_g))
 
-    return mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf, logZ, grad #, mu_g, Sigma_g, Sigma_full_g, logZ
+    return mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf, log_posterior, grad #, mu_g, Sigma_g, Sigma_full_g, logZ
 
 def compute_marginal_likelihood_mvn(L, mu, Sigma, eta, theta, skip_problematic=None):
     
@@ -398,7 +432,7 @@ def _predict(mu, Sigma_full, t, t_grad_list, t_pred, k1, k2, k3, f=True):
 
 
 
-    Kpp = cov_fun0(t_pred, t_pred.T, k1, k2) + k3
+    Kpp = cov_fun0(t_pred, t_pred.T, k1, k2) + k3**2
 
     Kpf = np.zeros((P, Df))
     Kpf[:, :N] = cov_fun0(t_pred, t.T, k1, k2) + k3

@@ -110,7 +110,7 @@ X1, X2, X3, X4 = np.meshgrid(x1, x2, x3, x4)
 Xd = np.column_stack((X1.ravel(), X2.ravel(), X3.ravel(), X4.ravel()))
 
 # fit initial model
-mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf, logz_uni = ep.ep_unimodality(X, y[:, None], k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2, t2=Xd, verbose=10, nu2=1.)
+mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf, logz_uni, grads = ep.ep_unimodality(X, y[:, None], k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2, t2=Xd, verbose=10, nu2=1.)
 
 # make predictions
 mu_ep, var_ep = ep.predict(mu_f, Sigma_full_f, X, [Xd, Xd, Xd, Xd], XYZ, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2)

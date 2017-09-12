@@ -128,16 +128,20 @@ Finally, carrying out the integrals yields
 \end{align}
 
 Simplifying
-
 \begin{align}
-	\ln c_i &= \ln \mathbb{E}_{Q_{-i}}\left[\phi\left(-f_i'\right)\right] + \ln \mathbb{E}_{Q_{-i}}\left[\phi(-g_i)\right] + \ln \mathbb{E}_{Q_{-i}}\left[\phi\left(f_i'\right)\right] + \ln \mathbb{E}_{Q_{-i}}\left[ \phi(g_i)\right]\\
-	& - \ln \mathbb{E}_{Q_{-i}}\left[\mathcal{N}\left(f_i'|m^f_i, v^f_i\right)\right] - \ln \mathbb{E}_{Q_{-i}}\left[\mathcal{N}\left(g_i|m^g_i, v^g_i\right)\right]
+		\ln c_i &= \ln \left[\mathbb{E}_{Q_{-i}}\left[\phi\left(-f_i'\right)\right]\mathbb{E}_{Q_{-i}}\left[(1-\phi(g_i))\right] + \mathbb{E}_{Q_{-i}}\left[\phi\left(f_i'\right)\right]\mathbb{E}_{Q_{-i}}\left[\phi(g_i)\right]\right] - \ln \mathbb{E}_{Q_{-i}}\left[\mathcal{N}\left(f_i'|m^f_i, v^f_i\right)\mathcal{N}\left(g_i|m^g_i, v^g_i\right)\right]\\
+		 &=\ln \left[\mathbb{E}_{Q_{-i}}\left[\phi\left(-f_i'\right)\right]\mathbb{E}_{Q_{-i}}\left[(1-\phi(g_i))\right] + \mathbb{E}_{Q_{-i}}\left[\phi\left(f_i'\right)\right]\mathbb{E}_{Q_{-i}}\left[\phi(g_i)\right]\right] \\
+		 &\quad- \ln \mathbb{E}_{Q_{-i}}\left[\mathcal{N}\left(f_i'|m^f_i, v^f_i\right)\right] - \ln \mathbb{E}_{Q_{-i}}\left[\mathcal{N}\left(g_i|m^g_i, v^g_i\right)\right]
 \end{align}
+
+
+
+
 
 Using the results from above
 
 \begin{align}
-	\ln c_i &= \ln \phi\left(\frac{-m^f_{-i}}{\sqrt{1 + v^f_{-i}}}\right) + \ln \phi\left(\frac{-m^g_{-i}}{\sqrt{1 + v^g_{-i}}}\right)  + \ln \phi\left(\frac{m^f_{-i}}{\sqrt{1 + v^f_{-i}}}\right) + \ln \phi\left(\frac{m^g_{-i}}{\sqrt{1 + v^g_{-i}}}\right) \\
+	\ln c_i &= \ln \left[\phi\left(\frac{-m^f_{-i}}{\sqrt{1 + v^f_{-i}}}\right)\cdot \phi\left(\frac{-m^g_{-i}}{\sqrt{1 + v^g_{-i}}}\right)  + \phi\left(\frac{m^f_{-i}}{\sqrt{1 + v^f_{-i}}}\right) \cdot \ln \phi\left(\frac{m^g_{-i}}{\sqrt{1 + v^g_{-i}}}\right)\right] \\
 	& +\frac12 \ln2\pi + \frac12 \ln\left(v^f_{-i} + v^f_i\right) + \frac12\frac{(m^f_{-i} - m^f_i)^2}{v^f_{-i} + v^f_i}  \\
 	& +\frac12 \ln2\pi + \frac12 \ln\left(v^g_{-i} + v^g_i\right) + \frac12\frac{(m^g_{-i} - m^g_i)^2}{v^g_{-i} + v^g_i}
 \end{align}

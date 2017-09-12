@@ -84,7 +84,7 @@ M = 20
 Xd = np.linspace(-10, 10, M)[:, None]
 
 # fit initial model
-mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf, logz_uni = ep.ep_unimodality(X, y, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2, t2=Xd, verbose=10, nu2=1., c1 = 1.)
+mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf, logz_uni, grads = ep.ep_unimodality(X, y, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2, t2=Xd, verbose=10, nu2=1., c1 = 1.)
 
 # make predictions
 mu_ep, var_ep = ep.predict(mu_f, Sigma_full_f, X, [Xd], Xp, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2)

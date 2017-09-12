@@ -418,24 +418,52 @@ def _predict(mu, Sigma_full, t, t_grad_list, t_pred, k1, k2, k3, f=True):
     # K = generate_joint_derivative_kernel(t, t2, k1, k2)
 
     # t_grad_list = [t2.copy() for i in range(t.shape[1])]
-    K = generate_joint_derivative_kernel(t, t_grad_list, k1, k2, k3=k3)
+    # K = generate_joint_derivative_kernel(t, t_grad_list, k1, k2, k3=k3)
+# f_kernel_list = [se] + [GPy.kern.DiffKern(se, d) for d in range(D)]   
+
+    ############################################################################################################################3
+    # Contruct kernel for f
+    ############################################################################################################################3
+    se = GPy.kern.RBF(input_dim = D, lengthscale=k2, variance=k1**2) + GPy.kern.Bias(input_dim=D, variance=k3**2)
+
+    # construct lists of kernel for f and fprime for each dimension
+    f_kernel_list = [se] + [GPy.kern.DiffKern(se, d) for d in range(D) if t_grad_list[d] is not None]    
+    t_list = [t] + [t_grad for t_grad in t_grad_list if t_grad is not None]#[t_pred.copy() for d in range(D)]
+    y_dummy_list = [None] + [None for d in range(D) if t_grad_list[d] is not None]
+
+    X1, _, output_index = GPy.util.multioutput.build_XY(t_list, y_dummy_list)
+    Kf_kernel = GPy.kern.MultioutputKern(kernels=f_kernel_list, cross_covariances={})
+    K = Kf_kernel.K(X1)
+
 
     # TODO: Make more flexible
     Ms = [len(t_grad) if t_grad is not None else 0 for t_grad in t_grad_list]
 
 
+    ############################################################################################################################3
+    # Contruct kernel Kpp
+    ############################################################################################################################3
+    Kpp = se.K(t_pred, t_pred)
 
-    Kpp = cov_fun0(t_pred, t_pred.T, k1, k2) + k3**2
 
-    Kpf = np.zeros((P, Df))
-    Kpf[:, :N] = cov_fun0(t_pred, t.T, k1, k2) + k3**2
+    ############################################################################################################################3
+    # Contruct kernel Kpp
+    ############################################################################################################################3
+    Xp = np.column_stack(  (t_pred, np.zeros((len(t_pred), 1))) )
+    Xf = np.column_stack(  (t, np.zeros((len(t), 1))) )
 
-    offset = N
-    for g in range(D):
-        if Ms[g] == 0:
+    index = 1
+    for t_grad in t_grad_list:
+        if t_grad is None:
             continue
-        Kpf[:P, offset:offset + Ms[g]] = cov_fun1(t_grad_list[g], t_pred, g, k1, k2).T
-        offset += Ms[g]
+
+        Xi = np.column_stack(  (t_grad, index*np.ones((len(t_grad), 1))) )
+        Xf = np.row_stack((Xf, Xi))
+
+        index = index + 1
+
+    Kpf = Kf_kernel.K(Xp, Xf)
+
 
     H =  np.linalg.solve(K, Kpf.T)
     pred_mean = np.dot(H.T, mu)

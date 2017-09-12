@@ -1,7 +1,7 @@
-import autograd.numpy as np
+import numpy as np
 import pylab as plt
 
-from autograd.scipy.stats import norm, t, multivariate_normal as mvn
+from scipy.stats import norm, t, multivariate_normal as mvn
 
 import GPy
 
@@ -29,7 +29,7 @@ np.random.seed(110)
 D = 1
 
 # optimization tol
-tol = 1e-5
+tol = 1e-8
 
 
 ####################################################################################################################################################3
@@ -78,6 +78,19 @@ mu_gpy, var_gpy = gpy_model.predict(Xnew=Xp)
 # Fit unimodal GP
 ##############################################################################################################3
 
+
+# prepare f kernel
+f_kernel = GPy.kern.RBF(input_dim = D, lengthscale=scale, variance=variance) + GPy.kern.Bias(input_dim=D, variance=bias)
+
+# add priors
+f_kernel.parameters[0].variance.unconstrain()
+f_kernel.parameters[0].variance.set_prior(GPy.priors.Gamma.from_EV(100, 100))
+f_kernel.parameters[0].variance.constrain_positive()
+
+f_kernel.parameters[1].variance.unconstrain()
+f_kernel.parameters[1].variance.set_prior(GPy.priors.Gamma.from_EV(100, 100))
+f_kernel.parameters[1].variance.constrain_positive()
+
 c1, c2 = 1., 1.
 
 params = np.array([variance, scale, bias, c1, c2])
@@ -104,20 +117,11 @@ for itt in range(500):
 	# map current parameter to parameter space
 	k1, k2, bias, c1, c2 = np.exp(log_params)
 
-	# prepare f kernel
-	f_kernel = GPy.kern.RBF(input_dim = D, lengthscale=k2, variance=k1**2) + GPy.kern.Bias(input_dim=D, variance=bias**2)
-
-	# add priors
-	f_kernel.parameters[0].variance.unconstrain()
-	f_kernel.parameters[0].variance.set_prior(GPy.priors.Gamma.from_EV(100, 100))
-	f_kernel.parameters[0].variance.constrain_positive()
-
-	f_kernel.parameters[1].variance.unconstrain()
-	f_kernel.parameters[1].variance.set_prior(GPy.priors.Gamma.from_EV(100, 100))
-	f_kernel.parameters[1].variance.constrain_positive()
+	# update kernel
+	f_kernel[:] = [k1, k2, bias]
 
 	# fit model with n ew parameters
-	mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf, logz_uni, grads = ep.ep_unimodality(X, y, f_kernel=f_kernel, sigma2=sigma2, t2=Xd, verbose=0, nu2=1., c1 = np.sqrt(c1),  c2=c2, tol=1e-6, max_itt=100)
+	mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf, logz_uni, grads = ep.ep_unimodality(X, y, f_kernel=f_kernel, sigma2=sigma2, t2=Xd, verbose=0, nu2=1., c1=c1,  c2=c2, tol=1e-6, max_itt=100)
 
 	# map gradients to log space
 	grads *= np.exp(log_params)
@@ -141,7 +145,7 @@ for itt in range(500):
 
 # make predictions
 mu_g, Sigma_g, Sigma_full_g, Lg = g_posterior_list[0]
-mu_ep, var_ep = ep.predict(mu_f, Sigma_full_f, X, [Xd], Xp, k1=np.sqrt(variance), k2=scale, k3=np.sqrt(bias), sigma2=sigma2)
+mu_ep, var_ep = ep.predict(mu_f, Sigma_full_f, X, [Xd], Xp, k1=variance, k2=scale, k3=bias, sigma2=sigma2)
 mu_g_pred, sigma_g_pred = ep.predict(mu_g, Sigma_full_g, Xd, [Xd], Xp, c1, c2)
 
 

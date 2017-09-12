@@ -32,7 +32,7 @@ def update_posterior(K, eta, theta):
 
     return mu, Sigma, Sigma_full, L
 
-def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu2 = 1., alpha=0.9, tol=1e-4, verbose=0, c1=None, c2=None, c3=0, moment_function=None, seed=0, k3=0):
+def ep_unimodality(t, y, f_kernel, sigma2, t2=None, m=None, max_itt=50, nu=10., nu2 = 1., alpha=0.9, tol=1e-4, verbose=0, c1=None, c2=None, c3=0, moment_function=None, seed=0):
 
     np.random.seed(seed)
     t0 = time.time()
@@ -64,6 +64,9 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
         moment_function = compute_moments_strict
 
 
+    ###################################################################################
+    # Initialize sites
+    ###################################################################################
 
     # sites for likelihood 
     eta_y, theta_y = np.zeros(Df), np.zeros(Df)
@@ -80,13 +83,11 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
     ###################################################################################
     # Contruct kernel for f using GPy
     ###################################################################################
-    se = GPy.kern.RBF(input_dim = D, lengthscale=k2, variance=k1**2) + GPy.kern.Bias(input_dim=D, variance=k3**2)
-
+    
     # construct lists of kernel for f and fprime for each dimension
-    f_kernel_list = [se] + [GPy.kern.DiffKern(se, d) for d in range(D)]    
+    f_kernel_list = [f_kernel] + [GPy.kern.DiffKern(f_kernel, d) for d in range(D)]    
     t_list = [t] + [t2.copy() for d in range(D)]
     y_dummy_list = [None] + [None for d in range(D)]
-
 
     X1, _, _ = GPy.util.multioutput.build_XY(t_list, y_dummy_list)
     Kf_kernel = GPy.kern.MultioutputKern(kernels=f_kernel_list, cross_covariances={})
@@ -300,9 +301,8 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
             
             return np.outer(b, b) - mult_diag(sqrt_theta, np.linalg.solve(prior_gamma_B, np.diag(sqrt_theta)), left=True)
 
-        dL_dK_f = compute_dl_DK(Kf, eta_fp + eta_y, theta_fp + theta_y)
-        d = 0
-        dL_dK_g = compute_dl_DK(Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d])
+        
+        
     #     vec1, vec2 = np.linalg.solve(prior_gamma_B_chol, s), np.linalg.solve(prior_gamma_B_chol, ep_params.gamma_sites.eta[:, t]/s)
 
     #     gradients[0] += -0.5*np.trace(np.dot(R, jac_variance))*self.variance
@@ -310,32 +310,20 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
     #     gradients[2] += -0.5*np.trace(np.dot(R, jac_bias))*self.bias
 
 
-
         #############################################################################3
         # hadle gradients for f
         #############################################################################3
-        se = GPy.kern.RBF(input_dim = 1, lengthscale=k2, variance=k1**2) + GPy.kern.Bias(input_dim=1, variance=k3**2)
-        se_der = GPy.kern.DiffKern(se, 0)
-        X1,Y1, output_index = GPy.util.multioutput.build_XY([t, t2],[None, None])
-        Kf_kernel = GPy.kern.MultioutputKern(kernels=[se, se_der], cross_covariances={})
-        
-         # priors
-        #Kf_kernel.parameters[0].parameters[0].variance.unconstrain()
-        #Kf_kernel.parameters[0].parameters[0].variance.set_prior(GPy.priors.StudentT(mu=0, sigma=1, nu=4))
-        #Kf_kernel.parameters[0].parameters[0].variance.constrain_positive()
-
-        Kf_kernel.parameters[0].parameters[1].variance.unconstrain()
-        Kf_kernel.parameters[0].parameters[1].variance.set_prior(GPy.priors.StudentT(mu=0, sigma=1, nu=4))
-        Kf_kernel.parameters[0].parameters[1].variance.constrain_positive()
-
+        dL_dK_f = compute_dl_DK(Kf, eta_fp + eta_y, theta_fp + theta_y)
         Kf_kernel.update_gradients_full(dL_dK_f, X1)
-
         grad_f = Kf_kernel.gradient + Kf_kernel._log_prior_gradients()
 
 
         #############################################################################3
         # hadle gradients for g
         #############################################################################3
+        d = 0
+        dL_dK_g = compute_dl_DK(Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d])
+
         se_g = GPy.kern.RBF(input_dim = 1, lengthscale=c2, variance=c1**2)
         se_g_der = GPy.kern.DiffKern(se_g, 0)
         X2,Y2, output_index = GPy.util.multioutput.build_XY([t2, t2],[np.zeros((M, 1)), np.zeros((M, 1))])

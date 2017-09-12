@@ -29,7 +29,7 @@ np.random.seed(110)
 D = 1
 
 # optimization tol
-tol = 1e-6
+tol = 1e-5
 
 
 ####################################################################################################################################################3
@@ -104,8 +104,20 @@ for itt in range(500):
 	# map current parameter to parameter space
 	k1, k2, bias, c1, c2 = np.exp(log_params)
 
+	# prepare f kernel
+	f_kernel = GPy.kern.RBF(input_dim = D, lengthscale=k2, variance=k1**2) + GPy.kern.Bias(input_dim=D, variance=bias**2)
+
+	# add priors
+	f_kernel.parameters[0].variance.unconstrain()
+	f_kernel.parameters[0].variance.set_prior(GPy.priors.Gamma.from_EV(100, 100))
+	f_kernel.parameters[0].variance.constrain_positive()
+
+	f_kernel.parameters[1].variance.unconstrain()
+	f_kernel.parameters[1].variance.set_prior(GPy.priors.Gamma.from_EV(100, 100))
+	f_kernel.parameters[1].variance.constrain_positive()
+
 	# fit model with n ew parameters
-	mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf, logz_uni, grads = ep.ep_unimodality(X, y, k1=np.sqrt(k1), k2=k2, k3=np.sqrt(bias), sigma2=sigma2, t2=Xd, verbose=0, nu2=1., c1 = np.sqrt(c1),  c2=c2, tol=1e-6, max_itt=100)
+	mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf, logz_uni, grads = ep.ep_unimodality(X, y, f_kernel=f_kernel, sigma2=sigma2, t2=Xd, verbose=0, nu2=1., c1 = np.sqrt(c1),  c2=c2, tol=1e-6, max_itt=100)
 
 	# map gradients to log space
 	grads *= np.exp(log_params)

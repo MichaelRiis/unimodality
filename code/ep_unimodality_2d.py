@@ -318,19 +318,14 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
     X1,Y1, output_index = GPy.util.multioutput.build_XY([t, t2],[None, None])
     Kf_kernel = GPy.kern.MultioutputKern(kernels=[se, se_der], cross_covariances={})
     
-
-
-
      # priors
-    Kf_kernel.parameters[0].parameters[0].variance.unconstrain()
-    Kf_kernel.parameters[0].parameters[0].variance.set_prior(GPy.priors.StudentT(mu=0, sigma=1, nu=4))
-    Kf_kernel.parameters[0].parameters[0].variance.constrain_positive()
+    #Kf_kernel.parameters[0].parameters[0].variance.unconstrain()
+    #Kf_kernel.parameters[0].parameters[0].variance.set_prior(GPy.priors.StudentT(mu=0, sigma=1, nu=4))
+    #Kf_kernel.parameters[0].parameters[0].variance.constrain_positive()
 
     Kf_kernel.parameters[0].parameters[1].variance.unconstrain()
     Kf_kernel.parameters[0].parameters[1].variance.set_prior(GPy.priors.StudentT(mu=0, sigma=1, nu=4))
     Kf_kernel.parameters[0].parameters[1].variance.constrain_positive()
-
-
 
     Kf_kernel.update_gradients_full(dL_dK_f, X1)
 
@@ -363,14 +358,6 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
     print('Log posterior: %4.3f' % log_posterior)
     print('\tlog prior: %4.3f' % log_prior)
     print('\tlog lik: %4.3f\n' % logZ)
-
-
-    # print('Log Z: %6.5f' % logZ)
-
-
-
-# 
-    # import ipdb; ipdb.set_trace()
 
 
     grad = np.hstack((grad_f, grad_g))
@@ -435,7 +422,7 @@ def _predict(mu, Sigma_full, t, t_grad_list, t_pred, k1, k2, k3, f=True):
     Kpp = cov_fun0(t_pred, t_pred.T, k1, k2) + k3**2
 
     Kpf = np.zeros((P, Df))
-    Kpf[:, :N] = cov_fun0(t_pred, t.T, k1, k2) + k3
+    Kpf[:, :N] = cov_fun0(t_pred, t.T, k1, k2) + k3**2
 
     offset = N
     for g in range(D):

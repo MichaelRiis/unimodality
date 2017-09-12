@@ -77,6 +77,7 @@ mu_gpy, var_gpy = gpy_model.predict(Xnew=Xp)
 ##############################################################################################################3
 # Fit unimodal GP
 ##############################################################################################################3
+c1, c2 = 1., 1.
 
 
 # prepare f kernel
@@ -91,7 +92,14 @@ f_kernel.parameters[1].variance.unconstrain()
 f_kernel.parameters[1].variance.set_prior(GPy.priors.Gamma.from_EV(100, 100))
 f_kernel.parameters[1].variance.constrain_positive()
 
-c1, c2 = 1., 1.
+# prepare g kernel
+g_kernel = GPy.kern.RBF(input_dim = D, lengthscale=c2, variance=c1) #+ GPy.kern.Bias(input_dim=D, variance=c3)
+
+# add priors
+g_kernel.variance.unconstrain()
+g_kernel.variance.set_prior(GPy.priors.StudentT(mu=0, sigma=1, nu=4))
+g_kernel.variance.constrain_positive()
+
 
 params = np.array([variance, scale, bias, c1, c2])
 log_params = np.log(params)
@@ -108,6 +116,8 @@ logparams = []
 
 names = ['K1', 'K2', 'K3', 'C1', 'C2']
 
+c3 = 0
+
 fig = plt.figure()
 for itt in range(500):
 
@@ -119,9 +129,11 @@ for itt in range(500):
 
 	# update kernel
 	f_kernel[:] = [k1, k2, bias]
+	g_kernel[:] = [c1, c2]
+
 
 	# fit model with n ew parameters
-	mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf, logz_uni, grads = ep.ep_unimodality(X, y, f_kernel=f_kernel, sigma2=sigma2, t2=Xd, verbose=0, nu2=1., c1=c1,  c2=c2, tol=1e-6, max_itt=100)
+	mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf, logz_uni, grads = ep.ep_unimodality(X, y, f_kernel=f_kernel, g_kernel=g_kernel, sigma2=sigma2, t2=Xd, verbose=0, nu2=1., tol=1e-6, max_itt=100)
 
 	# map gradients to log space
 	grads *= np.exp(log_params)

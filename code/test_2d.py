@@ -65,6 +65,7 @@ else:
 	lppd_gpy = np.mean(log_npdf(ytest, mu_gpy.ravel(), var_gpy.ravel() + sigma2))
 
 err_gpy = np.mean((fp.ravel() - mu_gpy.ravel())**2)/np.mean(fp.ravel()**2)
+logz_gpy = -gpy_model.objective_function()
 
 ####################################################################################################################################################3
 # Unimodal
@@ -78,7 +79,7 @@ X1, X2 = np.meshgrid(x1, x2)
 Xd = np.column_stack((X1.ravel(), X2.ravel()))
 
 # fit
-mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf = ep.ep_unimodality(X, y, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2, t2=Xd, verbose=10, nu2=1., c1=1, c2=lengthscale)
+mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf, logz_uni, grads = ep.ep_unimodality(X, y, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2, t2=Xd, verbose=10, nu2=1., c1=1, c2=lengthscale)
 
 # predict
 mu_ep, var_ep = ep.predict(mu_f, Sigma_full_f, X, [Xd, Xd], XY, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2)
@@ -99,13 +100,15 @@ print(2*'\n')
 names = ['GPy', 'Uni']
 lppds = [lppd_gpy, lppd_uni]
 nmses = [err_gpy, err_uni]
+logzs = [logz_gpy, logz_uni]
 
 print(60*'-')
-print('%10s\t%s\t\t%s' % ('Name', 'LPPD', 'NMSE'))
+print('%10s\t%s\t\t%s\t\t%s' % ('Name', 'LPPD', 'NMSE', 'log Z'))
 print(60*'-')
 
-for name, lppd, nmse in zip(names, lppds, nmses):
-	print('%10s\t%4.3f\t\t%4.3f' % (name, lppd, nmse))
+for name, lppd, nmse, logz in zip(names, lppds, nmses, logzs):
+	print('%10s\t%4.3f\t\t%4.3f\t\t%4.3f' % (name, lppd, nmse, logz))
+
 
 ####################################################################################################################################################3
 # Plot
@@ -151,7 +154,7 @@ plt.plot(X[:, 0], X[:, 1], 'r.')
 plt.colorbar()
 plt.title('Unimodal GP')
 
-if M > 0:
+if M > 1:
 
 	plt.subplot(2, 3, 5)
 	mu_g = g_posterior_list[0][0][:(len(x1)*len(x2))].reshape((len(x1), len(x2)))
@@ -171,7 +174,7 @@ fig.tight_layout()
 
 
 
-if M > 0:
+if M > 1:
 	plt.figure()
 	plt.subplot(1, 2, 1)
 	mu_g = g_posterior_list[0][0]

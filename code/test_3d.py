@@ -92,7 +92,7 @@ mu_gpy, var_gpy = gpy_model.predict_noiseless(Xnew=XYZ)
 # evaluate
 lppd_gpy = np.mean(gpy_model.log_predictive_density(Xtest, ytest))
 err_gpy = np.mean((fp.ravel() - mu_gpy.ravel())**2)/np.mean(fp.ravel()**2)
-
+logz_gpy = -gpy_model.objective_function()
 
 ####################################################################################################################################################3
 # Unimodal
@@ -107,7 +107,7 @@ X1, X2, X3 = np.meshgrid(x1, x2, x3)
 Xd = np.column_stack((X1.ravel(), X2.ravel(), X3.ravel()))
 
 # fit initial model
-mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf = ep.ep_unimodality(X, y[:, None], k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2, t2=Xd, verbose=10, nu2=1.)
+mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf, logz_uni, grads = ep.ep_unimodality(X, y[:, None], k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2, t2=Xd, verbose=10, nu2=1.)
 
 # make predictions
 mu_ep, var_ep = ep.predict(mu_f, Sigma_full_f, X, [Xd, Xd, Xd], XYZ, k1=np.sqrt(variance), k2=lengthscale, sigma2=sigma2)
@@ -120,7 +120,6 @@ lppd_uni = ep.lppd(ytest, mu_f, Sigma_full_f, X, [Xd, Xd, Xd], Xtest, k1=np.sqrt
 err_uni = np.mean((fp.ravel() - mu_ep.ravel())**2)/np.mean(fp.ravel()**2)
 
 
-
 ####################################################################################################################################################3
 # Evaluation
 ####################################################################################################################################################3
@@ -129,10 +128,11 @@ print(2*'\n')
 names = ['GPy', 'Uni']
 lppds = [lppd_gpy, lppd_uni]
 nmses = [err_gpy, err_uni]
+logzs = [logz_gpy, logz_uni]
 
 print(60*'-')
-print('%10s\t%s\t\t%s' % ('Name', 'LPPD', 'NMSE'))
+print('%10s\t%s\t\t%s\t\t%s' % ('Name', 'LPPD', 'NMSE', 'log Z'))
 print(60*'-')
 
-for name, lppd, nmse in zip(names, lppds, nmses):
-	print('%10s\t%4.3f\t\t%4.3f' % (name, lppd, nmse))
+for name, lppd, nmse, logz in zip(names, lppds, nmses, logzs):
+	print('%10s\t%4.3f\t\t%4.3f\t\t%4.3f' % (name, lppd, nmse, logz))

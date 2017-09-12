@@ -77,13 +77,9 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
     # sites for g' and m
     eta_gp, theta_gp =np.array([np.zeros(Dg) for d in range(D)]) , np.array([initial_site_variance*np.ones(Dg) for d in range(D)])
 
-    # prepare kernels
-    t_grad_list = [t2.copy() for i in range(D)]
-    # Kf = generate_joint_derivative_kernel(t, t_grad_list, k1, k2, k3)
-
-    ###################################################################################3
+    ###################################################################################
     # Contruct kernel for f using GPy
-    ###################################################################################3
+    ###################################################################################
     se = GPy.kern.RBF(input_dim = D, lengthscale=k2, variance=k1**2) + GPy.kern.Bias(input_dim=D, variance=k3**2)
 
     # construct lists of kernel for f and fprime for each dimension
@@ -97,40 +93,29 @@ def ep_unimodality(t, y, k1, k2, sigma2, t2=None, m=None, max_itt=50, nu=10., nu
     Kf = Kf_kernel.K(X1)
 
 
+    ###################################################################################
+    # Contruct kernel for each g using GPy
+    ###################################################################################
+    Kg_object_list = []
+    for d in range(D):
+        se_g = GPy.kern.RBF(input_dim = D, lengthscale=c2, variance=c1**2) + GPy.kern.Bias(input_dim=D, variance=c3**2)
+        se_g_der = GPy.kern.DiffKern(se_g, d)
+        Kg_object_list.append(GPy.kern.MultioutputKern(kernels=[se_g, se_g_der], cross_covariances={}))
 
-    # t_grad_list1 = [t2.copy(), None, None]
-    # t_grad_list2 = [None, t2.copy(), None]
-    # t_grad_list3 = [None, None, t2.copy()]
-    # t_grad_list = [t_grad_list1, t_grad_list2, t_grad_list3]
-
-
-    t_grad_list = []
-    for d1 in range(D):
-        t_grad_list.append([t2.copy() if d2 is d1 else None for d2 in range(D)])
-# 
-
-
-    Kg_list = [generate_joint_derivative_kernel(t2.copy(), t_grad_list_i, c1, c2, c3) for t_grad_list_i in t_grad_list]
+    Xg1, _, _ = GPy.util.multioutput.build_XY([t2, t2], [None, None])
+    Kg_list = [kg.K(Xg1) for kg in Kg_object_list]
 
 
-
-
-    # print('N: {}'.format(N))
-    # print('M: {}'.format(M))
-    # print('D: {}'.format(D))
-    # print('N + D*M: {}'.format(N + D*M))
-
-    # print(Kf.shape)
-    # for Kg in Kg_list:
-    #     print(Kg.shape)
-
-
-
-    # prepare global approximation
+    ###################################################################################
+    # Prepare global approximations
+    ###################################################################################
     mu_f, Sigma_f, Sigma_full_f, Lf = update_posterior(Kf, eta_fp + eta_y, theta_fp + theta_y)
     g_posterior_list = [update_posterior(Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d]) for d in range(D)]
 
 
+    ###################################################################################
+    # Iterate
+    ###################################################################################
     for itt in range(max_itt):
 
         old_params = np.hstack((mu_f, Sigma_f)) # , mu_g, Sigma_g

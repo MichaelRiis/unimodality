@@ -450,6 +450,76 @@ def _predict(mu, Sigma_full, t, t_grad_list, t_pred, k1, k2, k3, f=True):
     pred_cov = Kpp -  np.dot(Kpf, H) + np.dot(H.T, np.dot(Sigma_full, H))
     return pred_mean, pred_cov
 
+def _predict_f(mu, Sigma_full, t, t_grad_list, t_pred, kernel):
+    """ returns predictive mean and full covariance """
+
+    N, D = t.shape
+
+    ############################################################################################################################3
+    # Contruct kernel for f
+    ############################################################################################################################3
+    # se = GPy.kern.RBF(input_dim = D, lengthscale=k2, variance=k1) + GPy.kern.Bias(input_dim=D, variance=k3)
+
+    # construct lists of kernel for f and fprime for each dimension
+    f_kernel_list = [kernel] + [GPy.kern.DiffKern(kernel, d) for d in range(D) if t_grad_list[d] is not None]    
+    t_list = [t] + [t_grad for t_grad in t_grad_list if t_grad is not None]#[t_pred.copy() for d in range(D)]
+    y_dummy_list = [None] + [None for d in range(D) if t_grad_list[d] is not None]
+
+    X1, _, output_index = GPy.util.multioutput.build_XY(t_list, y_dummy_list)
+    Kf_kernel = GPy.kern.MultioutputKern(kernels=f_kernel_list, cross_covariances={})
+    K = Kf_kernel.K(X1)
+
+
+    # TODO: Make more flexible
+    Ms = [len(t_grad) if t_grad is not None else 0 for t_grad in t_grad_list]
+
+
+    ############################################################################################################################3
+    # Contruct kernel Kpp
+    ############################################################################################################################3
+    Kpp = kernel.K(t_pred, t_pred)
+
+
+    ############################################################################################################################3
+    # Contruct kernel Kpf
+    ############################################################################################################################3
+    Xp = np.column_stack(  (t_pred, np.zeros((len(t_pred), 1))) )
+    Xf = np.column_stack(  (t, np.zeros((len(t), 1))) )
+
+    index = 1
+    for t_grad in t_grad_list:
+        if t_grad is None:
+            continue
+
+        Xi = np.column_stack(  (t_grad, index*np.ones((len(t_grad), 1))) )
+        Xf = np.row_stack((Xf, Xi))
+
+        index = index + 1
+
+    Kpf = Kf_kernel.K(Xp, Xf)
+
+    ############################################################################################################################3
+    # Compute predictive distributions
+    ############################################################################################################################3
+    H =  np.linalg.solve(K, Kpf.T)
+    pred_mean = np.dot(H.T, mu)
+
+    pred_cov = Kpp -  np.dot(Kpf, H) + np.dot(H.T, np.dot(Sigma_full, H))
+    return pred_mean, pred_cov
+
+
+def predict_f(mu, Sigma_full, t, t2, t_pred, f_kernel, sigma2 = None):
+
+    pred_mean, pred_cov = _predict_f(mu, Sigma_full, t, t2, t_pred, f_kernel)
+    pred_var_ = np.diag(pred_cov)
+
+    if sigma2 is None:
+        sigma2 = 0
+
+    pred_var = pred_var_ + sigma2
+
+    return pred_mean, pred_var
+
 def predict(mu, Sigma_full, t, t2, t_pred, k1, k2, k3=None, sigma2 = None, f=True):
 
     pred_mean, pred_cov = _predict(mu, Sigma_full, t, t2, t_pred, k1, k2, k3, f)

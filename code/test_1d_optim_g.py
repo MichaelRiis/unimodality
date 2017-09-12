@@ -145,7 +145,7 @@ for itt in range(500):
 
 # make predictions
 mu_g, Sigma_g, Sigma_full_g, Lg = g_posterior_list[0]
-mu_ep, var_ep = ep.predict(mu_f, Sigma_full_f, X, [Xd], Xp, k1=variance, k2=scale, k3=bias, sigma2=sigma2)
+mu_ep, var_ep = ep.predict_f(mu_f, Sigma_full_f, X, [Xd], Xp, f_kernel, sigma2=sigma2)
 mu_g_pred, sigma_g_pred = ep.predict(mu_g, Sigma_full_g, Xd, [Xd], Xp, c1, c2)
 
 

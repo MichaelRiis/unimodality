@@ -78,7 +78,7 @@ g_kernel_base.variance.set_prior(GPy.priors.StudentT(mu=0, sigma=1, nu=4))
 g_kernel_base.variance.constrain_positive()
 
 # Define grid points for pseudoobservations
-M = 0
+M = 20
 Xd = np.linspace(-12, 12, M)[:, None]
 
 # fit model
@@ -89,9 +89,6 @@ print(unimodal)
 # make predictions
 mu_ep, var_ep = unimodal_model.predict(Xp)
 mu_g_pred, sigma_g_pred = unimodal_model.predict_g(Xp, g_index=0) #(mu_g, Sigma_full_g, Xd, [Xd], Xp, g_kernel_base.variance, g_kernel_base.lengthscale)
-
-# make predictions
-mu_g, Sigma_g, Sigma_full_g, Lg = unimodal_model.g_posterior_list[0]
 
 
 ##############################################################################################################3

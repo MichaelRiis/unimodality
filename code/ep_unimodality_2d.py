@@ -5,6 +5,7 @@ from scipy.stats import norm
 from scipy.misc import logsumexp
 
 import GPy
+from GPy.inference.latent_function_inference.expectation_propagation import posteriorParams
 
 from probit_moments import ProbitMoments
 from moment_functions import compute_moments_softinformation, compute_moments_strict
@@ -25,9 +26,12 @@ def update_posterior(K, eta, theta):
     L = np.linalg.cholesky(B)
     V = np.linalg.solve(L, G)
     Sigma_full = K - np.dot(V.T, V)
-    mu, Sigma = np.dot(Sigma_full, eta), np.diag(Sigma_full)
+    mu = np.dot(Sigma_full, eta)
+    #Sigma = np.diag(Sigma_full)
 
-    return mu, Sigma, Sigma_full, L
+    return posteriorParams(mu=mu, Sigma=Sigma_full, L=L)
+
+    # return mu, Sigma, Sigma_full, L
 
 def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=None, max_itt=50, nu=10., nu2 = 1., alpha=0.9, tol=1e-6, verbose=0, moment_function=None, seed=0):
 
@@ -76,8 +80,10 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     ###################################################################################
     # Prepare global approximations
     ###################################################################################
-    mu_f, Sigma_f, Sigma_full_f, Lf = update_posterior(Kf, eta_fp + eta_y, theta_fp + theta_y)
+    f_posterior = update_posterior(Kf, eta_fp + eta_y, theta_fp + theta_y)
     g_posterior_list = [update_posterior(Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d]) for d in range(D)]
+
+
 
 
     ###################################################################################
@@ -85,7 +91,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     ###################################################################################
     for itt in range(max_itt):
 
-        old_params = np.hstack((mu_f, Sigma_f)) # , mu_g, Sigma_g
+        old_params = np.hstack((f_posterior.mu, f_posterior.Sigma_diag)) # , mu_g, Sigma_g
 
         if verbose > 0:
             print('Iteration %d' % (itt + 1))
@@ -94,7 +100,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
         d_list = np.random.choice(range(D), size=D, replace=False)
         for d in d_list:
 
-            mu_g, Sigma_g, Sigma_full_g, Lg = g_posterior_list[d]
+            g_posterior = g_posterior_list[d]
 
             j_list = np.random.choice(range(M), size=M, replace=False) if M > 0 else []
             for j in j_list:
@@ -103,7 +109,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
                 i = M + j
 
                 # compute cavity
-                eta_cav, theta_cav = mu_g[i]/Sigma_g[i] - eta_gp[d, j], 1./Sigma_g[i] - theta_gp[d, j]
+                eta_cav, theta_cav = g_posterior.mu[i]/g_posterior.Sigma_diag[i] - eta_gp[d, j], 1./g_posterior.Sigma_diag[i] - theta_gp[d, j]
                 m_cav, v_cav = eta_cav/theta_cav, 1./theta_cav
 
                 if v_cav <= 0:
@@ -136,15 +142,15 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
         d_list = np.random.choice(range(D), size=D, replace=False)
         for d in d_list:
 
-            mu_g, Sigma_g, Sigma_full_g, Lg = g_posterior_list[d]
+            g_posterior = g_posterior_list[d]
             j_list = np.random.choice(range(M), size=M, replace=False) if M > 0 else []
             for j in j_list:
 
                 i = N + d*M +  j
 
                 # compute cavity
-                eta_cav_fp, theta_cav_fp = mu_f[i]/Sigma_f[i] - eta_fp[j], 1./Sigma_f[i] - theta_fp[j]
-                eta_cav_g, theta_cav_g = mu_g[j]/Sigma_g[j] - eta_g[d, j], 1./Sigma_g[j] - theta_g[d, j]
+                eta_cav_fp, theta_cav_fp = f_posterior.mu[i]/f_posterior.Sigma_diag[i] - eta_fp[j], 1./f_posterior.Sigma_diag[i] - theta_fp[j]
+                eta_cav_g, theta_cav_g = g_posterior.mu[j]/g_posterior.Sigma_diag[j] - eta_g[d, j], 1./g_posterior.Sigma_diag[j] - theta_g[d, j]
 
                 # transform to means and variances
                 m_cav_fp, v_cav_fp = eta_cav_fp/theta_cav_fp, 1./theta_cav_fp
@@ -189,10 +195,10 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
 
             # update posterior
             g_posterior_list[d] = update_posterior(Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d])
-            mu_f, Sigma_f, Sigma_full_f, Lf = update_posterior(Kf, eta_fp + eta_y, theta_fp + theta_y)
+            f_posterior = update_posterior(Kf, eta_fp + eta_y, theta_fp + theta_y)
 
       # check for convergence
-        new_params = np.hstack((mu_f, Sigma_f)) # , mu_g, Sigma_g
+        new_params = np.hstack((f_posterior.mu, f_posterior.Sigma_diag)) # , mu_g, Sigma_g
         if len(old_params) > 0 and np.mean((new_params-old_params)**2)/np.mean(old_params**2) < tol:
             run_time = time.time() - t0
 
@@ -205,11 +211,12 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     #############################################################################3
 
     # multivariate terms likelihood
-    f_term = compute_marginal_likelihood_mvn(Lf, mu_f, Sigma_full_f, eta_fp + eta_y, theta_fp + theta_y, skip_problematic=N)
-    g_terms = [compute_marginal_likelihood_mvn(Lg, mu_g, Sigma_full_g, eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d], skip_problematic=0)  for d, (mu_g, _, Sigma_full_g, Lg)in zip(range(D), g_posterior_list)]
+    f_term = compute_marginal_likelihood_mvn(f_posterior, eta_fp + eta_y, theta_fp + theta_y, skip_problematic=N)
+    g_terms = [compute_marginal_likelihood_mvn(g_posterior, eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d], skip_problematic=0)  for d, g_posterior in zip(range(D), g_posterior_list)]
 
     # log k_i
-    mu_g, _, Sigma_full_g, Lg = g_posterior_list[0]
+    d = 0
+    mu_g, Sigma_g, Lg = g_posterior_list[d].mu, g_posterior_list[d].Sigma_diag, g_posterior_list[d].L
     eta_cav, theta_cav = mu_g/Sigma_g - eta_gp, 1./Sigma_g - theta_gp
     mu_cav, tau_cav = eta_cav/theta_cav, 1./theta_cav
 
@@ -219,7 +226,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     log_k2 = log_k2_prob + 0.5*np.sum(np.log(tau_cav[:, M:]*theta_gp[:, M:] + 1)) + 0.5*np.sum((mu_cav[:, M:] - eta_gp[:, M:]/theta_gp[:, M:])**2/(tau_cav[:, M:] + 1./theta_gp[:, M:]))
 
     # log c_i
-    eta_cav_fp, theta_cav_fp = mu_f/Sigma_f - eta_fp, 1./Sigma_f - theta_fp
+    eta_cav_fp, theta_cav_fp = f_posterior.mu/f_posterior.Sigma_diag - eta_fp, 1./f_posterior.Sigma_diag - theta_fp
     eta_cav_g, theta_cav_g = mu_g/Sigma_g - eta_g, 1./Sigma_g - theta_g
     m_cav_fp, v_cav_fp = eta_cav_fp/theta_cav_fp, 1./theta_cav_fp
     m_cav_g, v_cav_g = eta_cav_g/theta_cav_g, 1./theta_cav_g
@@ -252,7 +259,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
         grad_dict['dL_dK_g%d' % d] = compute_dl_dK(Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d])
 
     # Done
-    return mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf, logZ, grad_dict#, mu_g, Sigma_g, Sigma_full_g, logZ
+    return f_posterior, g_posterior_list, Kf, logZ, grad_dict#, mu_g, Sigma_g, Sigma_full_g, logZ
 
 def compute_dl_dK(K, eta, theta, prior_mean = 0):
     sqrt_theta = np.sqrt(theta)
@@ -264,7 +271,9 @@ def compute_dl_dK(K, eta, theta, prior_mean = 0):
     return np.outer(b, b) - mult_diag(sqrt_theta, np.linalg.solve(prior_gamma_B, np.diag(sqrt_theta)), left=True)
 
 
-def compute_marginal_likelihood_mvn(L, mu, Sigma, eta, theta, skip_problematic=None):
+def compute_marginal_likelihood_mvn(posterior, eta, theta, skip_problematic=None):
+
+    L, mu, Sigma = posterior.L, posterior.mu, posterior.Sigma
     
     b = np.linalg.solve(L, eta/np.sqrt(theta))
 

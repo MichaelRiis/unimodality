@@ -4,8 +4,11 @@ import GPy
 import paramz
 
 from copy import deepcopy
-import ep_unimodality_2d as ep
 
+from importlib import reload
+
+import ep_unimodality_2d as ep
+reload(ep)
 
 class UnimodalGP(GPy.core.Model):
 
@@ -59,7 +62,7 @@ class UnimodalGP(GPy.core.Model):
     def parameters_changed(self):
 
         # Run EP
-        self.mu_f, Sigma_f, self.Sigma_full_f, self.g_posterior_list, Kf, self._log_lik, self.grad_dict = ep.ep_unimodality(self.Xf, self.Xg, self.X, self.Y, Kf_kernel=self.Kf_kernel.copy(), Kg_kernel_list=self.Kg_kernel_list, sigma2=self.sigma2, t2=self.Xd, verbose=0, nu2=1., tol=1e-6, max_itt=100)
+        self.f_posterior, self.g_posterior_list, Kf, self._log_lik, self.grad_dict = ep.ep_unimodality(self.Xf, self.Xg, self.X, self.Y, Kf_kernel=self.Kf_kernel.copy(), Kg_kernel_list=self.Kg_kernel_list, sigma2=self.sigma2, t2=self.Xd, verbose=0, nu2=1., tol=1e-6, max_itt=100)
 
         # update gradients for f
         self.Kf_kernel.update_gradients_full(self.grad_dict['dL_dK_f'], self.Xf)
@@ -89,8 +92,8 @@ class UnimodalGP(GPy.core.Model):
 
         # Compute predictive distributions
         H =  np.linalg.solve(Kff, Kpf.T)
-        pred_mean = np.dot(H.T, self.mu_f)
-        pred_cov = Kpp -  np.dot(Kpf, H) + np.dot(H.T, np.dot(self.Sigma_full_f, H))
+        pred_mean = np.dot(H.T, self.f_posterior.mu)
+        pred_cov = Kpp -  np.dot(Kpf, H) + np.dot(H.T, np.dot(self.f_posterior.Sigma, H))
 
         # if not full_cov:
         pred_var_ = np.diag(pred_cov)
@@ -102,7 +105,7 @@ class UnimodalGP(GPy.core.Model):
 
 
     def predict_g(self, Xnew, g_index=0, full_cov=False):
-        mu_g, Sigma_g, Sigma_full_g, Lg = self.g_posterior_list[g_index]
+        mu_g, Sigma_full_g = self.g_posterior_list[g_index].mu, self.g_posterior_list[g_index].Sigma
 
         # augment Xnew with kernel index
         Xp = np.column_stack(  (Xnew, np.zeros((len(Xnew), 1))) )

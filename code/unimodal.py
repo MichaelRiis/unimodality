@@ -148,7 +148,7 @@ class UnimodalGP(GPy.core.Model):
             print('Provided meta data is not used!')
 
         mu_test, var_test = self.predict(Xtest)
-        return ep.log_npdf(ytest, mu_test[:, None], var_test[:, None] + self.sigma2)
+        return ep.log_npdf(ytest, mu_test[:, None], var_test[:, None])
 
 
 

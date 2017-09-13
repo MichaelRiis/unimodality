@@ -55,6 +55,7 @@ kernel = GPy.kern.RBF(input_dim=D, lengthscale=scale, variance=variance) + GPy.k
 
 # fit initial model
 gpy_model = GPy.models.GPRegression(X=X, Y=y, kernel=kernel, noise_var=sigma2)
+gpy_model.Gaussian_noise.fix()	
 gpy_model.optimize()
 
 # make predictions
@@ -77,7 +78,7 @@ g_kernel_base.variance.set_prior(GPy.priors.StudentT(mu=0, sigma=1, nu=4))
 g_kernel_base.variance.constrain_positive()
 
 # Define grid points for pseudoobservations
-M = 20
+M = 0
 Xd = np.linspace(-12, 12, M)[:, None]
 
 # fit model

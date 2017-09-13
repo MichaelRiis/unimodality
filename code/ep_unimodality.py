@@ -6,6 +6,7 @@ from scipy.misc import logsumexp
 
 import GPy
 from GPy.inference.latent_function_inference.expectation_propagation import posteriorParams
+from GPy.util.linalg import  dtrtrs, dpotrs, tdot, symmetrify, jitchol
 
 from probit_moments import ProbitMoments
 from moment_functions import compute_moments_softinformation, compute_moments_strict
@@ -23,7 +24,7 @@ def update_posterior(K, eta, theta):
     sqrt_theta = np.sqrt(theta)
     G = sqrt_theta[:, None]*K
     B = np.identity(D) + G*sqrt_theta
-    L = np.linalg.cholesky(B)
+    L = jitchol(B)
     V = np.linalg.solve(L, G)
     Sigma_full = K - np.dot(V.T, V)
     mu = np.dot(Sigma_full, eta)
@@ -214,38 +215,45 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     f_term = compute_marginal_likelihood_mvn(f_posterior, eta_fp + eta_y, theta_fp + theta_y, skip_problematic=N)
     g_terms = [compute_marginal_likelihood_mvn(g_posterior, eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d], skip_problematic=0)  for d, g_posterior in zip(range(D), g_posterior_list)]
 
-    # log k_i
-    d = 0
-    mu_g, Sigma_g, Lg = g_posterior_list[d].mu, g_posterior_list[d].Sigma_diag, g_posterior_list[d].L
-    eta_cav, theta_cav = mu_g/Sigma_g - eta_gp, 1./Sigma_g - theta_gp
-    mu_cav, tau_cav = eta_cav/theta_cav, 1./theta_cav
+    log_k1, log_k2 = 0, 0
+    log_c1, log_c2, log_c3, log_c4 = 0, 0, 0, 0
+
+    for d in range(D):
+
+        mu_g, Sigma_g, Lg = g_posterior_list[d].mu, g_posterior_list[d].Sigma_diag, g_posterior_list[d].L
+        eta_cav, theta_cav = mu_g/Sigma_g - eta_gp, 1./Sigma_g - theta_gp
+        mu_cav, tau_cav = eta_cav/theta_cav, 1./theta_cav
+
+        # log k_i
+        log_k1 += np.sum(ProbitMoments.compute_normalization(m=0, v=1./(nu*m), mu=mu_cav[:, M:], sigma2= tau_cav[:, M:], log=True))
+        log_k2_prob = 0 #*0.5*np.sum(-np.log(theta_gp[:, M:]))
+        log_k2 += log_k2_prob + 0.5*np.sum(np.log(tau_cav[:, M:]*theta_gp[:, M:] + 1)) + 0.5*np.sum((mu_cav[:, M:] - eta_gp[:, M:]/theta_gp[:, M:])**2/(tau_cav[:, M:] + 1./theta_gp[:, M:]))
+
+        # log c_i
+        fp_slice = slice(N + d*M, N + (d+1)*M)
+        eta_cav_fp, theta_cav_fp = f_posterior.mu[fp_slice]/f_posterior.Sigma_diag[fp_slice] - eta_fp[fp_slice], 1./f_posterior.Sigma_diag[fp_slice] - theta_fp[fp_slice]
+        eta_cav_g, theta_cav_g = mu_g[:M]/Sigma_g[:M] - eta_g[d, :M], 1./Sigma_g[:M] - theta_g[d, :M]
+
+        m_cav_fp, v_cav_fp = eta_cav_fp/theta_cav_fp, 1./theta_cav_fp
+        m_cav_g, v_cav_g = eta_cav_g/theta_cav_g, 1./theta_cav_g
+
+        # compute expectation of mixture site wrt. cavity
+        log_A1 = ProbitMoments.compute_normalization(m=0, v=-1./nu2, mu=m_cav_fp, sigma2=v_cav_fp, log=True)
+        log_A2 = ProbitMoments.compute_normalization(m=0, v=-1, mu=m_cav_g, sigma2=v_cav_g, log=True)
+        log_A3 = ProbitMoments.compute_normalization(m=0, v=1./nu2, mu=m_cav_fp, sigma2=v_cav_fp, log=True)
+        log_A4 = ProbitMoments.compute_normalization(m=0, v=1., mu=m_cav_g, sigma2=v_cav_g, log=True)
 
 
-    log_k1 = np.sum(ProbitMoments.compute_normalization(m=0, v=1./(nu*m), mu=mu_cav[:, M:], sigma2= tau_cav[:, M:], log=True))
-    log_k2_prob = 0*0.5*np.sum(-np.log(theta_gp[:, M:]))
-    log_k2 = log_k2_prob + 0.5*np.sum(np.log(tau_cav[:, M:]*theta_gp[:, M:] + 1)) + 0.5*np.sum((mu_cav[:, M:] - eta_gp[:, M:]/theta_gp[:, M:])**2/(tau_cav[:, M:] + 1./theta_gp[:, M:]))
+        # log_c1, log_c2 = np.sum(logsumexp(np.row_stack((log_A1 + log_A2, log_A3 + log_A4)), axis = 0, keepdims=True)), 0
+        log_c1 += np.sum(logsumexp(np.row_stack((log_A1 + log_A2, log_A3 + log_A4)), axis = 0, keepdims=True))
+        log_c2 += 0
 
-    # log c_i
-    eta_cav_fp, theta_cav_fp = f_posterior.mu/f_posterior.Sigma_diag - eta_fp, 1./f_posterior.Sigma_diag - theta_fp
-    eta_cav_g, theta_cav_g = mu_g/Sigma_g - eta_g, 1./Sigma_g - theta_g
-    m_cav_fp, v_cav_fp = eta_cav_fp/theta_cav_fp, 1./theta_cav_fp
-    m_cav_g, v_cav_g = eta_cav_g/theta_cav_g, 1./theta_cav_g
+        # problematic terms
+        log_c3_prob = 0#0*0.5*np.sum(-np.log(theta_fp[N:]))
+        log_c4_prob = 0#0*0.5*np.sum(-np.log(theta_g[:, :M]))
 
-    # compute expectation of mixture site wrt. cavity
-    log_A1 = ProbitMoments.compute_normalization(m=0, v=-1./nu2, mu=m_cav_fp[N:], sigma2=v_cav_fp[N:], log=True)
-    log_A2 = ProbitMoments.compute_normalization(m=0, v=-1, mu=m_cav_g[:, :M].ravel(), sigma2=v_cav_g[:, :M].ravel(), log=True)
-    log_A3 = ProbitMoments.compute_normalization(m=0, v=1./nu2, mu=m_cav_fp[N:], sigma2=v_cav_fp[N:], log=True)
-    log_A4 = ProbitMoments.compute_normalization(m=0, v=1., mu=m_cav_g[:, :M].ravel(), sigma2=v_cav_g[:, :M].ravel(), log=True)
-
-    # import ipdb; ipdb.set_trace()
-    log_c1, log_c2 = np.sum(logsumexp(np.row_stack((log_A1 + log_A2, log_A3 + log_A4)), axis = 0, keepdims=True)), 0
- 
-    # problematic terms
-    log_c3_prob = 0*0.5*np.sum(-np.log(theta_fp[N:]))
-    log_c4_prob = 0*0.5*np.sum(-np.log(theta_g[:, :M]))
-
-    log_c3 = log_c3_prob + 0.5*np.sum(np.log(v_cav_fp[N:]*theta_fp[N:] +1)) + 0.5*np.sum((m_cav_fp[N:] - eta_fp[N:]/theta_fp[N:])**2/(v_cav_fp[N:] + 1./theta_fp[N:]))
-    log_c4 = log_c4_prob + 0.5*np.sum(np.log(v_cav_g[:, :M]*theta_g[:, :M] + 1)) + 0.5*np.sum((m_cav_g[:, :M] - eta_g[:, :M]/theta_g[:, :M])**2/(v_cav_g[:, :M] + 1./theta_g[:, :M]))
+        log_c3 += log_c3_prob + 0.5*np.sum(np.log(v_cav_fp*theta_fp[fp_slice] +1)) + 0.5*np.sum((m_cav_fp - eta_fp[fp_slice]/theta_fp[fp_slice])**2/(v_cav_fp + 1./theta_fp[fp_slice]))
+        log_c4 += log_c4_prob + 0.5*np.sum(np.log(v_cav_g*theta_g[:, :M] + 1)) + 0.5*np.sum((m_cav_g - eta_g[d, :M]/theta_g[d, :M])**2/(v_cav_g + 1./theta_g[d, :M]))
 
     logZ = log_k1 + log_k2 + log_c1 + log_c2 + log_c3 + log_c4 +  f_term + np.sum(g_terms)
 
@@ -253,22 +261,28 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     # handle gradients for f and each g
     #############################################################################3
 
-    grad_dict = {'dL_dK_f': compute_dl_dK(Kf, eta_fp + eta_y, theta_fp + theta_y)}
+    grad_dict = {'dL_dK_f': compute_dl_dK(f_posterior, Kf, eta_fp + eta_y, theta_fp + theta_y)}
     
     for d in range(D):
-        grad_dict['dL_dK_g%d' % d] = compute_dl_dK(Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d])
+        grad_dict['dL_dK_g%d' % d] = compute_dl_dK(g_posterior_list[d], Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d])
 
     # Done
     return f_posterior, g_posterior_list, Kf, logZ, grad_dict#, mu_g, Sigma_g, Sigma_full_g, logZ
 
-def compute_dl_dK(K, eta, theta, prior_mean = 0):
-    sqrt_theta = np.sqrt(theta)
-    C0_scaled = mult_diag(sqrt_theta, K, left=True)
-    prior_gamma_B = np.identity(len(K)) + mult_diag(sqrt_theta, C0_scaled, left=False)
+def compute_dl_dK(posterior, K, eta, theta, prior_mean = 0):
+    tau, v = theta, eta
 
-    b = sqrt_theta*np.linalg.solve(prior_gamma_B, sqrt_theta*(prior_mean - eta/theta))
+    tau_tilde_root = np.sqrt(tau)
+    Sroot_tilde_K = tau_tilde_root[:,None] * K
+    aux_alpha , _ = dpotrs(posterior.L, np.dot(Sroot_tilde_K, v), lower=1)
+    alpha = (v - tau_tilde_root * aux_alpha)[:,None] #(K + Sigma^(\tilde))^(-1) /mu^(/tilde)
+    LWi, _ = dtrtrs(posterior.L, np.diag(tau_tilde_root), lower=1)
+    Wi = np.dot(LWi.T, LWi)
+    symmetrify(Wi) #(K + Sigma^(\tilde))^(-1)
+
+    dL_dK = 0.5 * (tdot(alpha) - Wi)
     
-    return np.outer(b, b) - mult_diag(sqrt_theta, np.linalg.solve(prior_gamma_B, np.diag(sqrt_theta)), left=True)
+    return dL_dK
 
 
 def compute_marginal_likelihood_mvn(posterior, eta, theta, skip_problematic=None):

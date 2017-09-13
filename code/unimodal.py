@@ -146,6 +146,16 @@ class UnimodalGP(GPy.core.Model):
         return np.mean(pzs, axis = 1), np.var(pzs, axis = 1)    
 
 
+    def log_predictive_density(self, Xtest, ytest, Y_metadata=None):
+        
+        if Y_metadata is not None:
+            print('Provided meta data is not used!')
+
+        mu_test, var_test = self.predict(Xtest)
+        return ep.log_npdf(ytest, mu_test[:, None], var_test[:, None] + self.sigma2)
+
+
+
 
 
 

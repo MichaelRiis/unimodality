@@ -6,7 +6,7 @@ from importlib import reload
 import GPy
 
 from util import plot_with_uncertainty
-from ep_unimodality_2d import phi
+from ep_unimodality import phi
 
 import unimodal 
 reload(unimodal)

@@ -7,7 +7,7 @@ from copy import deepcopy
 
 from importlib import reload
 
-import ep_unimodality_2d as ep
+import ep_unimodality as ep
 reload(ep)
 
 class UnimodalGP(GPy.core.Model):

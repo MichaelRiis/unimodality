@@ -5,7 +5,7 @@ import pylab as plt
 import GPy
 
 from util import plot_with_uncertainty
-import ep_unimodality_2d as ep
+import ep_unimodality as ep
 from importlib import reload
 reload(ep)
 
@@ -118,14 +118,9 @@ var_ep_g2 = var_ep_g2.reshape((len(xs), len(ys)))
 ####################################################################################################################################################3
 
 
-# for line plot
-if N > 0:
-    idx = np.argmin(np.sum(X**2, axis = 1))
-    x0, y0 = X[idx, 0], X[idx, 1]
-    idx2 = np.argmin((xs-x0)**2)
-else:
-    x0, y0 = 0, 0
-    idx2 = np.argmin((xs-x0)**2)
+# for cross section plot
+x0, y0 = 0, 0
+idx2 = np.argmin((xs-x0)**2)
 
 
 # plot
@@ -161,7 +156,7 @@ plt.title('Cross section plot')
 if M > 1:
 
     plt.subplot(2, 3, 5)
-    mu_g = unimodal_model.g_posterior_list[0][0][:(len(x1)*len(x2))].reshape((len(x1), len(x2)))
+    mu_g = unimodal_model.g_posterior_list[0].mu[:(len(x1)*len(x2))].reshape((len(x1), len(x2)))
     plt.contourf(xs, xs, ep.phi(mu_ep_g1/np.sqrt(1+var_ep_g1)), 30)
     plt.plot(Xd[:, 0], Xd[:, 1], 'k.', markersize = 2, alpha=0.75)
     plt.colorbar()

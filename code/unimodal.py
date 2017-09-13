@@ -82,10 +82,6 @@ class UnimodalGP(GPy.core.Model):
         # augment Xnew with kernel index
         Xp = np.column_stack(  (Xnew, np.zeros((len(Xnew), 1))) )
 
-        # concatenate and augment X + Xd with kernel indeces (equal to self.Xf when predicting f)
-        # Xf = np.column_stack(  (self.X, np.zeros((self.N, 1))) )
-        # Xf = np.row_stack([Xf] + [np.column_stack(  (self.Xd, (d+1)*np.ones((self.M, 1))) ) for d in range(self.D)])
-
         # construct kernels
         Kff = self.Kf_kernel.K(self.Xf)
         Kpp = self.Kf_kernel.K(Xp, Xp)

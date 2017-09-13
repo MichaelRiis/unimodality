@@ -1,24 +1,15 @@
 import numpy as np
 import pylab as plt
 
-from scipy.stats import norm, t, multivariate_normal as mvn
+from importlib import reload
 
 import GPy
 
 from util import plot_with_uncertainty
-import ep_unimodality_2d as ep
-from importlib import reload
-reload(ep)
+from ep_unimodality_2d import phi
 
 import unimodal 
 reload(unimodal)
-
-
-####################################################################################################################################################3
-# Auxilary functions
-####################################################################################################################################################3
-phi = lambda x: norm.cdf(x)
-
 
 ####################################################################################################################################################3
 # Parameters and settings
@@ -30,19 +21,12 @@ np.random.seed(110)
 # dimension
 D = 1
 
-# optimization tol
-tol = 1e-8
-
-
 ####################################################################################################################################################3
 # Define test objective function
 ####################################################################################################################################################3
 mu = 3
 def f(x):
     return 0.1*(x-mu)**2
-
-f0 = f(mu)
-
 
 ####################################################################################################################################################3
 # Generate initial observations
@@ -79,30 +63,20 @@ mu_gpy, var_gpy = gpy_model.predict(Xnew=Xp)
 ##############################################################################################################3
 # Fit unimodal GP
 ##############################################################################################################3
-c1, c2 = 1., 1.
+g_variance, g_lengthscale = 1., 1.
 
 # prepare f kernel
 f_kernel_base = GPy.kern.RBF(input_dim = D, lengthscale=scale, variance=variance) + GPy.kern.Bias(input_dim=D, variance=bias)
 
-# add priors
-# f_kernel_base.parameters[0].variance.unconstrain()
-# f_kernel_base.parameters[0].variance.set_prior(GPy.priors.Gamma.from_EV(1, 100))
-# f_kernel_base.parameters[0].variance.constrain_positive()
-
-# f_kernel_base.parameters[1].variance.unconstrain()
-# f_kernel_base.parameters[1].variance.set_prior(GPy.priors.Gamma.from_EV(1, 100))
-# f_kernel_base.parameters[1].variance.constrain_positive()
-
 # prepare g kernel
-g_kernel_base = GPy.kern.RBF(input_dim = D, lengthscale=c2, variance=c1) #+ GPy.kern.Bias(input_dim=D, variance=c3)
+g_kernel_base = GPy.kern.RBF(input_dim = D, lengthscale=g_lengthscale, variance=g_variance)
 
-# add priors
+# add prior to magnitude of g
 g_kernel_base.variance.unconstrain()
 g_kernel_base.variance.set_prior(GPy.priors.StudentT(mu=0, sigma=1, nu=4))
 g_kernel_base.variance.constrain_positive()
 
-
-# Define point grid for pseudoobservations
+# Define grid points for pseudoobservations
 M = 20
 Xd = np.linspace(-12, 12, M)[:, None]
 
@@ -122,7 +96,6 @@ mu_g, Sigma_g, Sigma_full_g, Lg = unimodal_model.g_posterior_list[0]
 ##############################################################################################################3
 # plot
 ##############################################################################################################3
-
 fig = plt.figure(figsize = (15, 5))
 plt.subplot(1,3, 1)
 plot_with_uncertainty(Xp, mu_ep, ystd=np.sqrt(var_ep), color='r', label = 'Unimodal')
@@ -132,21 +105,22 @@ plt.plot(Xp, f(Xp), 'g-')
 plt.grid(True)
 plt.legend()
 plt.ylim((-3, 20))
-
+plt.title('Function f')
 
 plt.subplot(1, 3, 2)
 pz = phi(mu_g_pred/np.sqrt(1 + sigma_g_pred))
-pz_mean, pz_var = ep.sample_z_probabilities(mu_g, Sigma_full_g, Xd, [Xd], Xp, c1, c2)
+pz_mean, pz_var = unimodal_model.sample_z_probabilities(Xp, g_index=0)
 plot_with_uncertainty(x=Xp, y=pz_mean, ystd=np.sqrt(pz_var))
 plt.axvline(mu, color = 'k', linestyle='--', alpha=0.5)
 plt.ylim((-0.3, 1.3))
 plt.grid(True)
+plt.title('Post. probabilities of sign of grad')
 
 plt.subplot(1, 3, 3)
 plot_with_uncertainty(x=Xp, y=mu_g_pred, ystd=np.sqrt(sigma_g_pred))
 plt.grid(True)
-plt.ylim((-12, 12))
 plt.axvline(mu, color = 'k', linestyle='--', alpha=0.5)
+plt.title('Latent function g')
 fig.tight_layout()
 
 plt.show()

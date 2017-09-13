@@ -3,6 +3,7 @@ import numpy as np
 import GPy
 import paramz
 
+from copy import deepcopy
 import ep_unimodality_2d as ep
 
 
@@ -34,6 +35,7 @@ class UnimodalGP(GPy.core.Model):
         t_list = [X] + [Xd.copy() for d in range(self.D)]
         y_dummy_list = [None] + [None for d in range(self.D)]
 
+        # TODO: Remove y_dummy_list
         self.Xf, _, self.Xf_output_index = GPy.util.multioutput.build_XY(t_list, y_dummy_list)
         self.Kf_kernel = GPy.kern.MultioutputKern(kernels=f_kernel_list, cross_covariances={}, name='Kf')
 
@@ -46,9 +48,11 @@ class UnimodalGP(GPy.core.Model):
 
         self.Kg_kernel_list = []
         for d in range(self.D):
-            g_kernel_der = GPy.kern.DiffKern(self.g_kernel_base, d)
-            self.Kg_kernel_list.append(GPy.kern.MultioutputKern(kernels=[self.g_kernel_base, g_kernel_der], cross_covariances={}, name='Kg%d'%d))
-            self.link_parameter(self.Kg_kernel_list[-1])
+            g_kernel = self.g_kernel_base.copy()
+            g_kernel_der = GPy.kern.DiffKern(g_kernel, d)
+            Kg_kernel = GPy.kern.MultioutputKern(kernels=[g_kernel, g_kernel_der], cross_covariances={}, name='Kg%d'%d)
+            self.Kg_kernel_list.append(Kg_kernel)
+            self.link_parameter(self.Kg_kernel_list[d])
 
         self.Xg, _, self.Xg_output_index = GPy.util.multioutput.build_XY([Xd, Xd], [None, None])
 
@@ -87,8 +91,6 @@ class UnimodalGP(GPy.core.Model):
         Kpp = self.Kf_kernel.K(Xp, Xp)
         Kpf = self.Kf_kernel.K(Xp, self.Xf)
 
-        # import ipdb; ipdb.set_trace()
-
         # Compute predictive distributions
         H =  np.linalg.solve(Kff, Kpf.T)
         pred_mean = np.dot(H.T, self.mu_f)
@@ -103,10 +105,7 @@ class UnimodalGP(GPy.core.Model):
         return pred_mean, pred_var
 
 
-    def predict_g(self, Xnew, g_index = 0, full_cov=False):
-        if full_cov:
-            raise NotImplementedError('Fullcov not implemented')
-
+    def predict_g(self, Xnew, g_index=0, full_cov=False):
         mu_g, Sigma_g, Sigma_full_g, Lg = self.g_posterior_list[g_index]
 
         # augment Xnew with kernel index
@@ -114,7 +113,7 @@ class UnimodalGP(GPy.core.Model):
 
         # concatenate and augment Xd + Xd with kernel indeces (equal to self.Xf when predicting f)
         Xg = np.column_stack(  (self.Xd, np.zeros((self.M, 1))) )
-        Xg = np.row_stack([Xg] + [np.column_stack(  (self.Xd, (g_index+1)*np.ones((self.M, 1))) )])
+        Xg = np.row_stack([Xg] + [np.column_stack(  (self.Xd, np.ones((self.M, 1))) )])
 
         # construct kernels
         Kg_kernel = self.Kg_kernel_list[g_index]
@@ -122,17 +121,33 @@ class UnimodalGP(GPy.core.Model):
         Kpp = Kg_kernel.K(Xp, Xp)
         Kpg = Kg_kernel.K(Xp, Xg)
 
-        # import ipdb; ipdb.set_trace()
-
         # Compute predictive distributions
         H =  np.linalg.solve(Kgg, Kpg.T)
         pred_mean = np.dot(H.T, mu_g)
         pred_cov = Kpp -  np.dot(Kpg, H) + np.dot(H.T, np.dot(Sigma_full_g, H))
 
-        # if not full_cov:
-        pred_var = np.diag(pred_cov)
+        if not full_cov:
+            pred_cov = np.diag(pred_cov)
 
-        return pred_mean, pred_var
+
+        return pred_mean, pred_cov
+
+
+    def sample_z_probabilities(self, Xnew, g_index=0, num_samples=1000):
+
+        pred_mean, pred_cov = self.predict_g(Xnew, g_index=g_index, full_cov=True)
+        D = pred_cov.shape[0]
+
+        L = np.linalg.cholesky(pred_cov + 1e-6*np.identity(D)) 
+
+        zs = pred_mean[:, None] + np.dot(L, np.random.normal(0, 1, size=(D, num_samples)))
+        pzs = ep.phi(zs)
+
+        return np.mean(pzs, axis = 1), np.var(pzs, axis = 1)    
+
+
+
+
 
 
 

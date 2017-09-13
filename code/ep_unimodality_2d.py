@@ -6,11 +6,8 @@ from scipy.misc import logsumexp
 
 import GPy
 
-
 from probit_moments import ProbitMoments
 from moment_functions import compute_moments_softinformation, compute_moments_strict
-
-# from derivative_kernels import generate_joint_derivative_kernel, cov_fun0, cov_fun1, cov_fun2
 from util import mult_diag
 
 npdf = lambda x, m, v: 1./np.sqrt(2*np.pi*v)*np.exp(-(x-m)**2/(2*v))
@@ -32,7 +29,7 @@ def update_posterior(K, eta, theta):
 
     return mu, Sigma, Sigma_full, L
 
-def ep_unimodality(t, y, f_kernel, g_kernel, sigma2, t2=None, m=None, max_itt=50, nu=10., nu2 = 1., alpha=0.9, tol=1e-4, verbose=0, moment_function=None, seed=0):
+def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=None, max_itt=50, nu=10., nu2 = 1., alpha=0.9, tol=1e-6, verbose=0, moment_function=None, seed=0):
 
     np.random.seed(seed)
     t0 = time.time()
@@ -71,32 +68,10 @@ def ep_unimodality(t, y, f_kernel, g_kernel, sigma2, t2=None, m=None, max_itt=50
     eta_gp, theta_gp =np.array([np.zeros(Dg) for d in range(D)]) , np.array([initial_site_variance*np.ones(Dg) for d in range(D)])
 
     ###################################################################################
-    # Contruct kernel for f using GPy
+    # Contruct kernels
     ###################################################################################
-    
-    # construct lists of kernel for f and fprime for each dimension
-    f_kernel_list = [f_kernel] + [GPy.kern.DiffKern(f_kernel, d) for d in range(D)]    
-    t_list = [t] + [t2.copy() for d in range(D)]
-    y_dummy_list = [None] + [None for d in range(D)]
-
-    X1, _, _ = GPy.util.multioutput.build_XY(t_list, y_dummy_list)
-    Kf_kernel = GPy.kern.MultioutputKern(kernels=f_kernel_list, cross_covariances={})
     Kf = Kf_kernel.K(X1)
-
-
-    ###################################################################################
-    # Contruct kernel for each g using GPy
-    ###################################################################################
-    Kg_object_list = []
-    for d in range(D):
-        g_kernel_der = GPy.kern.DiffKern(g_kernel, d)
-        Kg_object_list.append(GPy.kern.MultioutputKern(kernels=[g_kernel, g_kernel_der], cross_covariances={}))
-
-    X2, _, _ = GPy.util.multioutput.build_XY([t2, t2], [None, None])
-    Kg_list = [kg.K(X2) for kg in Kg_object_list]
-
-
-
+    Kg_list = [kg.K(X2) for kg in Kg_kernel_list]
 
     ###################################################################################
     # Prepare global approximations
@@ -180,15 +155,6 @@ def ep_unimodality(t, y, f_kernel, g_kernel, sigma2, t2=None, m=None, max_itt=50
                     continue
 
                 # compute moments
-                # Z_fp, m1_fp, m2_fp = ProbitMoments.compute_moments(m=0, v=1, mu=m_cav_fp, sigma2=v_cav_fp, return_normalizer=True, normalized=False)
-                # Z_g, m1_g, m2_g = ProbitMoments.compute_moments(m=0, v=1, mu=m_cav_g, sigma2=v_cav_g, return_normalizer=True, normalized=False)
-                # Z = (1-Z_fp)*(1-Z_g) + Z_fp*Z_g
-
-                # site_fp_m = ((m_cav_fp-m1_fp)*(1-Z_g) + m1_fp*Z_g)/Z
-                # site_fp_m2 = (((m_cav_fp**2 + v_cav_fp)-m2_fp)*(1-Z_g) + m2_fp*Z_g)/Z
-                # site_g_m = ((1-Z_fp)*(m_cav_g-m1_g) + Z_fp*m1_g)/Z
-                # site_g_m2 = ((1-Z_fp)*((m_cav_g**2 + v_cav_g)-m2_g) + m2_g*Z_fp)/Z
-
                 Z, site_fp_m, site_fp_m2, site_g_m, site_g_m2 = moment_function(m_cav_fp, v_cav_fp, m_cav_g, v_cav_g, nu2=nu2)
 
                 if Z == 0 or np.isnan(Z):
@@ -234,105 +200,69 @@ def ep_unimodality(t, y, f_kernel, g_kernel, sigma2, t2=None, m=None, max_itt=50
                 print('Converged in %d iterations in %4.3fs' % (itt + 1, run_time))
             break
 
+    #############################################################################3
+    # Marginal likelihood
+    #############################################################################3
 
-    if D == 1:
+    # multivariate terms likelihood
+    f_term = compute_marginal_likelihood_mvn(Lf, mu_f, Sigma_full_f, eta_fp + eta_y, theta_fp + theta_y, skip_problematic=N)
+    g_terms = [compute_marginal_likelihood_mvn(Lg, mu_g, Sigma_full_g, eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d], skip_problematic=0)  for d, (mu_g, _, Sigma_full_g, Lg)in zip(range(D), g_posterior_list)]
 
-        # marginal likelihood
-        f_term = compute_marginal_likelihood_mvn(Lf, mu_f, Sigma_full_f, eta_fp + eta_y, theta_fp + theta_y, skip_problematic=N)
-        g_terms = [compute_marginal_likelihood_mvn(Lg, mu_g, Sigma_full_g, eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d], skip_problematic=0)  for d, (mu_g, _, Sigma_full_g, Lg)in zip(range(D), g_posterior_list)]
-
-    # 
-        # log k_i
-        # TODO: DOES NOT WORK FOR the CASE D > 1
-        mu_g, _, Sigma_full_g, Lg = g_posterior_list[0]
-        eta_cav, theta_cav = mu_g/Sigma_g - eta_gp, 1./Sigma_g - theta_gp
-        mu_cav, tau_cav = eta_cav/theta_cav, 1./theta_cav
-
-
-        log_k1 = np.sum(ProbitMoments.compute_normalization(m=0, v=1./(nu*m), mu=mu_cav[:, M:], sigma2= tau_cav[:, M:], log=True))
-        log_k2_prob = 0*0.5*np.sum(-np.log(theta_gp[:, M:]))
-        log_k2 = log_k2_prob + 0.5*np.sum(np.log(tau_cav[:, M:]*theta_gp[:, M:] + 1)) + 0.5*np.sum((mu_cav[:, M:] - eta_gp[:, M:]/theta_gp[:, M:])**2/(tau_cav[:, M:] + 1./theta_gp[:, M:]))
+    # log k_i
+    mu_g, _, Sigma_full_g, Lg = g_posterior_list[0]
+    eta_cav, theta_cav = mu_g/Sigma_g - eta_gp, 1./Sigma_g - theta_gp
+    mu_cav, tau_cav = eta_cav/theta_cav, 1./theta_cav
 
 
-        # log c_i
-        eta_cav_fp, theta_cav_fp = mu_f/Sigma_f - eta_fp, 1./Sigma_f - theta_fp
-        eta_cav_g, theta_cav_g = mu_g/Sigma_g - eta_g, 1./Sigma_g - theta_g
-        m_cav_fp, v_cav_fp = eta_cav_fp/theta_cav_fp, 1./theta_cav_fp
-        m_cav_g, v_cav_g = eta_cav_g/theta_cav_g, 1./theta_cav_g
+    log_k1 = np.sum(ProbitMoments.compute_normalization(m=0, v=1./(nu*m), mu=mu_cav[:, M:], sigma2= tau_cav[:, M:], log=True))
+    log_k2_prob = 0*0.5*np.sum(-np.log(theta_gp[:, M:]))
+    log_k2 = log_k2_prob + 0.5*np.sum(np.log(tau_cav[:, M:]*theta_gp[:, M:] + 1)) + 0.5*np.sum((mu_cav[:, M:] - eta_gp[:, M:]/theta_gp[:, M:])**2/(tau_cav[:, M:] + 1./theta_gp[:, M:]))
 
+    # log c_i
+    eta_cav_fp, theta_cav_fp = mu_f/Sigma_f - eta_fp, 1./Sigma_f - theta_fp
+    eta_cav_g, theta_cav_g = mu_g/Sigma_g - eta_g, 1./Sigma_g - theta_g
+    m_cav_fp, v_cav_fp = eta_cav_fp/theta_cav_fp, 1./theta_cav_fp
+    m_cav_g, v_cav_g = eta_cav_g/theta_cav_g, 1./theta_cav_g
 
-        # compute expectation of mixture site wrt. cavity
-        log_A1 = ProbitMoments.compute_normalization(m=0, v=-1./nu2, mu=m_cav_fp[N:], sigma2=v_cav_fp[N:], log=True)
-        log_A2 = ProbitMoments.compute_normalization(m=0, v=-1, mu=m_cav_g[:, :M], sigma2=v_cav_g[:, :M], log=True)
-        log_A3 = ProbitMoments.compute_normalization(m=0, v=1./nu2, mu=m_cav_fp[N:], sigma2=v_cav_fp[N:], log=True)
-        log_A4 = ProbitMoments.compute_normalization(m=0, v=1., mu=m_cav_g[:, :M], sigma2=v_cav_g[:, :M], log=True)
+    # compute expectation of mixture site wrt. cavity
+    log_A1 = ProbitMoments.compute_normalization(m=0, v=-1./nu2, mu=m_cav_fp[N:], sigma2=v_cav_fp[N:], log=True)
+    log_A2 = ProbitMoments.compute_normalization(m=0, v=-1, mu=m_cav_g[:, :M].ravel(), sigma2=v_cav_g[:, :M].ravel(), log=True)
+    log_A3 = ProbitMoments.compute_normalization(m=0, v=1./nu2, mu=m_cav_fp[N:], sigma2=v_cav_fp[N:], log=True)
+    log_A4 = ProbitMoments.compute_normalization(m=0, v=1., mu=m_cav_g[:, :M].ravel(), sigma2=v_cav_g[:, :M].ravel(), log=True)
 
-        log_c1, log_c2 = np.sum(logsumexp(np.row_stack((log_A1 + log_A2, log_A3 + log_A4)), axis = 0, keepdims=True)), 0
-     
-        # problematic terms
-        log_c3_prob = 0*0.5*np.sum(-np.log(theta_fp[N:]))
-        log_c4_prob = 0*0.5*np.sum(-np.log(theta_g[:, :M]))
+    # import ipdb; ipdb.set_trace()
+    log_c1, log_c2 = np.sum(logsumexp(np.row_stack((log_A1 + log_A2, log_A3 + log_A4)), axis = 0, keepdims=True)), 0
+ 
+    # problematic terms
+    log_c3_prob = 0*0.5*np.sum(-np.log(theta_fp[N:]))
+    log_c4_prob = 0*0.5*np.sum(-np.log(theta_g[:, :M]))
 
-        log_c3 = log_c3_prob + 0.5*np.sum(np.log(v_cav_fp[N:]*theta_fp[N:] +1)) + 0.5*np.sum((m_cav_fp[N:] - eta_fp[N:]/theta_fp[N:])**2/(v_cav_fp[N:] + 1./theta_fp[N:]))
-        log_c4 = log_c4_prob + 0.5*np.sum(np.log(v_cav_g[:, :M]*theta_g[:, :M] + 1)) + 0.5*np.sum((m_cav_g[:, :M] - eta_g[:, :M]/theta_g[:, :M])**2/(v_cav_g[:, :M] + 1./theta_g[:, :M]))
+    log_c3 = log_c3_prob + 0.5*np.sum(np.log(v_cav_fp[N:]*theta_fp[N:] +1)) + 0.5*np.sum((m_cav_fp[N:] - eta_fp[N:]/theta_fp[N:])**2/(v_cav_fp[N:] + 1./theta_fp[N:]))
+    log_c4 = log_c4_prob + 0.5*np.sum(np.log(v_cav_g[:, :M]*theta_g[:, :M] + 1)) + 0.5*np.sum((m_cav_g[:, :M] - eta_g[:, :M]/theta_g[:, :M])**2/(v_cav_g[:, :M] + 1./theta_g[:, :M]))
 
-        logZ = log_k1 + log_k2 + log_c1 + log_c2 + log_c3 + log_c4 +  f_term + np.sum(g_terms)
+    logZ = log_k1 + log_k2 + log_c1 + log_c2 + log_c3 + log_c4 +  f_term + np.sum(g_terms)
 
+    #############################################################################3
+    # handle gradients for f and each g
+    #############################################################################3
 
-    # 
-    # 
-        # gradients
-        def compute_dl_DK(K, eta, theta, prior_mean = 0):
-            sqrt_theta = np.sqrt(theta)
-            C0_scaled = mult_diag(sqrt_theta, K, left=True)
-            prior_gamma_B = np.identity(len(K)) + mult_diag(sqrt_theta, C0_scaled, left=False)
-            # prior_gamma_B_chol = np.linalg.cholesky(prior_gamma_B)
-
-            b = sqrt_theta*np.linalg.solve(prior_gamma_B, sqrt_theta*(prior_mean - eta/theta))
-            
-            return np.outer(b, b) - mult_diag(sqrt_theta, np.linalg.solve(prior_gamma_B, np.diag(sqrt_theta)), left=True)
-
+    grad_dict = {'dL_dK_f': compute_dl_dK(Kf, eta_fp + eta_y, theta_fp + theta_y)}
     
-        #############################################################################3
-        # hadle gradients for f
-        #############################################################################3
-        dL_dK_f = compute_dl_DK(Kf, eta_fp + eta_y, theta_fp + theta_y)
-        Kf_kernel.update_gradients_full(dL_dK_f, X1)
-        grad_f = Kf_kernel.gradient + Kf_kernel._log_prior_gradients()
+    for d in range(D):
+        grad_dict['dL_dK_g%d' % d] = compute_dl_dK(Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d])
 
+    # Done
+    return mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf, logZ, grad_dict#, mu_g, Sigma_g, Sigma_full_g, logZ
 
+def compute_dl_dK(K, eta, theta, prior_mean = 0):
+    sqrt_theta = np.sqrt(theta)
+    C0_scaled = mult_diag(sqrt_theta, K, left=True)
+    prior_gamma_B = np.identity(len(K)) + mult_diag(sqrt_theta, C0_scaled, left=False)
 
-        #############################################################################3
-        # hadle gradients for g
-        #############################################################################3
-        d = 0
-        dL_dK_g = compute_dl_DK(Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d])
+    b = sqrt_theta*np.linalg.solve(prior_gamma_B, sqrt_theta*(prior_mean - eta/theta))
+    
+    return np.outer(b, b) - mult_diag(sqrt_theta, np.linalg.solve(prior_gamma_B, np.diag(sqrt_theta)), left=True)
 
-        X2,_, _ = GPy.util.multioutput.build_XY([t2, t2],[np.zeros((M, 1)), np.zeros((M, 1))])
-        Kg_kernel = Kg_object_list[d]
-
-
-        # compute gradient for g in parameter space
-        Kg_kernel.update_gradients_full(dL_dK_g, X2)
-        grad_g = Kg_kernel.gradient + Kg_kernel._log_prior_gradients()
-
-
-        #  add prior contribution
-        log_prior = Kg_kernel.log_prior() + Kf_kernel.log_prior()
-        log_posterior = log_prior + logZ
-        print('Log posterior: %4.3f' % log_posterior)
-        print('\tlog prior: %4.3f' % log_prior)
-        print('\tlog lik: %4.3f\n' % logZ)
-
-
-        grad = np.hstack((grad_f, grad_g))
-
-
-    else:
-        print('No marginal likelihood and gradient computation for D = %d' % D)
-        log_posterior = grad = 0
-
-    return mu_f, Sigma_f, Sigma_full_f, g_posterior_list, Kf, log_posterior, grad #, mu_g, Sigma_g, Sigma_full_g, logZ
 
 def compute_marginal_likelihood_mvn(L, mu, Sigma, eta, theta, skip_problematic=None):
     
@@ -350,198 +280,3 @@ def compute_marginal_likelihood_mvn(L, mu, Sigma, eta, theta, skip_problematic=N
     quadterm = 0.5*np.sum(b**2)
 
     return -0.5*len(mu)*np.log(2*np.pi)  - logdet - quadterm
-
-
-def _predict(mu, Sigma_full, t, t_grad_list, t_pred, k1, k2, k3, f=True):
-    """ returns predictive mean and full covariance """
-
-    # TODO: Need to be validated!
-
-    # kernel functions
-    # cov_fun = lambda x, y: k1**2*np.exp(-0.5*(x-y)**2/k2**2)
-    # cov_fun1 = lambda x, y: -cov_fun(x,y)*(x-y)/k2**2
-    # cov_fun2 = lambda x, y: cov_fun(x,y)*(1 - (x-y)**2/k2**2 )/k2**2
-
-    if k3 is None:
-        k3 = 0
-
-    M = None
-    for t_grad in t_grad_list:
-        if t_grad is not None:
-            M = len(t_grad)
-
-    N, D = t.shape
-    # M = 100#len(t2)
-    if f:
-        Df = N + D*M
-    else: 
-        Df = N + M
-    P = t_pred.shape[0]
-
-
-    # K = generate_joint_derivative_kernel(t, t2, k1, k2)
-
-    # t_grad_list = [t2.copy() for i in range(t.shape[1])]
-    # K = generate_joint_derivative_kernel(t, t_grad_list, k1, k2, k3=k3)
-# f_kernel_list = [se] + [GPy.kern.DiffKern(se, d) for d in range(D)]   
-
-    ############################################################################################################################3
-    # Contruct kernel for f
-    ############################################################################################################################3
-    se = GPy.kern.RBF(input_dim = D, lengthscale=k2, variance=k1) + GPy.kern.Bias(input_dim=D, variance=k3)
-
-    # construct lists of kernel for f and fprime for each dimension
-    f_kernel_list = [se] + [GPy.kern.DiffKern(se, d) for d in range(D) if t_grad_list[d] is not None]    
-    t_list = [t] + [t_grad for t_grad in t_grad_list if t_grad is not None]#[t_pred.copy() for d in range(D)]
-    y_dummy_list = [None] + [None for d in range(D) if t_grad_list[d] is not None]
-
-    X1, _, output_index = GPy.util.multioutput.build_XY(t_list, y_dummy_list)
-    Kf_kernel = GPy.kern.MultioutputKern(kernels=f_kernel_list, cross_covariances={})
-    K = Kf_kernel.K(X1)
-
-
-    # TODO: Make more flexible
-    Ms = [len(t_grad) if t_grad is not None else 0 for t_grad in t_grad_list]
-
-
-    ############################################################################################################################3
-    # Contruct kernel Kpp
-    ############################################################################################################################3
-    Kpp = se.K(t_pred, t_pred)
-
-
-    ############################################################################################################################3
-    # Contruct kernel Kpp
-    ############################################################################################################################3
-    Xp = np.column_stack(  (t_pred, np.zeros((len(t_pred), 1))) )
-    Xf = np.column_stack(  (t, np.zeros((len(t), 1))) )
-
-    index = 1
-    for t_grad in t_grad_list:
-        if t_grad is None:
-            continue
-
-        Xi = np.column_stack(  (t_grad, index*np.ones((len(t_grad), 1))) )
-        Xf = np.row_stack((Xf, Xi))
-
-        index = index + 1
-
-    Kpf = Kf_kernel.K(Xp, Xf)
-
-
-    H =  np.linalg.solve(K, Kpf.T)
-    pred_mean = np.dot(H.T, mu)
-
-    pred_cov = Kpp -  np.dot(Kpf, H) + np.dot(H.T, np.dot(Sigma_full, H))
-    return pred_mean, pred_cov
-
-def _predict_f(mu, Sigma_full, t, t_grad_list, t_pred, kernel):
-    """ returns predictive mean and full covariance """
-
-    N, D = t.shape
-
-    ############################################################################################################################3
-    # Contruct kernel for f
-    ############################################################################################################################3
-
-    # construct lists of kernel for f and fprime for each dimension
-    f_kernel_list = [kernel] + [GPy.kern.DiffKern(kernel, d) for d in range(D) if t_grad_list[d] is not None]    
-    t_list = [t] + [t_grad for t_grad in t_grad_list if t_grad is not None]#[t_pred.copy() for d in range(D)]
-    y_dummy_list = [None] + [None for d in range(D) if t_grad_list[d] is not None]
-
-    X1, _, output_index = GPy.util.multioutput.build_XY(t_list, y_dummy_list)
-    Kf_kernel = GPy.kern.MultioutputKern(kernels=f_kernel_list, cross_covariances={})
-    K = Kf_kernel.K(X1)
-
-
-    # TODO: Make more flexible
-    Ms = [len(t_grad) if t_grad is not None else 0 for t_grad in t_grad_list]
-
-
-    ############################################################################################################################3
-    # Contruct kernel Kpp
-    ############################################################################################################################3
-    Kpp = kernel.K(t_pred, t_pred)
-
-
-    ############################################################################################################################3
-    # Contruct kernel Kpf
-    ############################################################################################################################3
-    Xp = np.column_stack(  (t_pred, np.zeros((len(t_pred), 1))) )
-    Xf = np.column_stack(  (t, np.zeros((len(t), 1))) )
-
-    index = 1
-    for t_grad in t_grad_list:
-        if t_grad is None:
-            continue
-
-        Xi = np.column_stack(  (t_grad, index*np.ones((len(t_grad), 1))) )
-        Xf = np.row_stack((Xf, Xi))
-
-        index = index + 1
-
-    Kpf = Kf_kernel.K(Xp, Xf)
-
-    ############################################################################################################################3
-    # Compute predictive distributions
-    ############################################################################################################################3
-    H =  np.linalg.solve(K, Kpf.T)
-    pred_mean = np.dot(H.T, mu)
-
-    pred_cov = Kpp -  np.dot(Kpf, H) + np.dot(H.T, np.dot(Sigma_full, H))
-    return pred_mean, pred_cov
-
-
-def predict_f(mu, Sigma_full, t, t2, t_pred, f_kernel, sigma2 = None):
-
-    pred_mean, pred_cov = _predict_f(mu, Sigma_full, t, t2, t_pred, f_kernel)
-    pred_var_ = np.diag(pred_cov)
-
-    if sigma2 is None:
-        sigma2 = 0
-
-    pred_var = pred_var_ + sigma2
-
-    return pred_mean, pred_var
-
-def predict(mu, Sigma_full, t, t2, t_pred, k1, k2, k3=None, sigma2 = None, f=True):
-
-    pred_mean, pred_cov = _predict(mu, Sigma_full, t, t2, t_pred, k1, k2, k3, f)
-    pred_var_ = np.diag(pred_cov)
-
-    if sigma2 is None:
-        sigma2 = 0
-
-    pred_var = pred_var_ + sigma2
-
-    return pred_mean, pred_var
-
-def lppd(ytest, mu, Sigma_full, t, t2, t_pred, k1, k2, k3=None, sigma2 = None, per_sample=False):
-
-    pred_mean, pred_var = predict(mu, Sigma_full, t, t2, t_pred, k1, k2, k3, sigma2)
-
-    lppd = log_npdf(ytest.ravel(), pred_mean, pred_var)
-
-    if not per_sample:
-        lppd = np.mean(lppd)
-
-    return lppd
-
-
-
-
-
-def sample_z_probabilities(mu, Sigma_full, t, t2, t_pred, c1, c2, c3=0, num_samples = 1000):
-
-
-    pred_mean, pred_cov = _predict(mu, Sigma_full, t, t2, t_pred, c1, c2, c3)
-    D = pred_cov.shape[0]
-
-    L = np.linalg.cholesky(pred_cov + 1e-6*np.identity(D)) 
-
-    zs = pred_mean[:, None] + np.dot(L, np.random.normal(0, 1, size=(D, num_samples)))
-    pzs = phi(zs)
-
-    return np.mean(pzs, axis = 1), np.var(pzs, axis = 1)
-
-

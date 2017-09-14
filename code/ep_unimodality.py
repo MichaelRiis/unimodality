@@ -64,13 +64,6 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     eta_y, theta_y = np.zeros(Df), np.zeros(Df)
     eta_y[:N], theta_y[:N] = y[:, 0]/sigma2, 1./sigma2
 
-    # sites connecting f' and g
-    initial_site_variance = 0
-    eta_fp, theta_fp = np.zeros(Df), initial_site_variance*np.ones(Df)
-
-    # sites for g' and m
-    # eta_gp, theta_gp =np.array([np.zeros(Dg) for d in range(D)]) , np.array([initial_site_variance*np.ones(Dg) for d in range(D)])
-
     ###################################################################################
     # Contruct kernels
     ###################################################################################
@@ -81,6 +74,13 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     ###################################################################################
     # Prepare marginal moments, site approximation and cavity containers
     ###################################################################################
+
+    # for f
+    f_marg_moments = marginalMoments(Df) 
+    f_ga_approx = gaussianApproximation(v=np.zeros(Df), tau=np.zeros(Df))
+    f_cavity = cavityParams(Df) 
+
+    # for each g
     g_marg_moments_list = [marginalMoments(2*M) for d in range(D)]
     g_ga_approx_list = [gaussianApproximation(v=np.zeros(2*M), tau=np.zeros(2*M)) for d in range(D)]
     g_cavity_list = [cavityParams(2*M) for d in range(D)]
@@ -91,7 +91,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     ###################################################################################
     # Prepare global approximations
     ###################################################################################
-    f_posterior = update_posterior(Kf, eta_fp + eta_y, theta_fp + theta_y)
+    f_posterior = update_posterior(Kf, f_ga_approx.v + eta_y, f_ga_approx.tau + theta_y)
     g_posterior_list = [update_posterior(Kg_list[d], g_ga_approx_list[d].v, g_ga_approx_list[d].tau) for d in range(D)]
 
 
@@ -114,6 +114,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
             g_posterior = g_posterior_list[d]
             g_ga_approx = g_ga_approx_list[d]
             g_cavity = g_cavity_list[d]
+            g_marg_mom = g_marg_moments_list[d]
 
             j_list = np.random.choice(range(M), size=M, replace=False) if M > 0 else []
             for j in j_list:
@@ -125,10 +126,10 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
                 g_cavity._update_i(eta=eta, ga_approx=g_ga_approx, post_params=g_posterior, i=i)
 
                 # match moments
-                g_marg_moments_list[d].Z_hat[i], g_marg_moments_list[d].mu_hat[i], g_marg_moments_list[d].sigma2_hat[i] = match_moments_g(m[d,j], g_cavity.v[i], g_cavity.tau[i], nu)
+                g_marg_mom.Z_hat[i], g_marg_mom.mu_hat[i], g_marg_mom.sigma2_hat[i] = match_moments_g(m[d,j], g_cavity.v[i], g_cavity.tau[i], nu)
 
                 # update
-                g_ga_approx._update_i(eta=eta, delta=alpha, post_params=g_posterior, marg_moments=g_marg_moments_list[d], i=i)
+                g_ga_approx._update_i(eta=eta, delta=alpha, post_params=g_posterior, marg_moments=g_marg_mom, i=i)
 
 
             # update joint
@@ -138,62 +139,35 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
         d_list = np.random.choice(range(D), size=D, replace=False)
         for d in d_list:
 
+            # get relevant EP parameters for dimension d
             g_posterior = g_posterior_list[d]
             g_ga_approx = g_ga_approx_list[d]
+            g_cavity = g_cavity_list[d]
+            g_marg_mom = g_marg_moments_list[d]
 
             j_list = np.random.choice(range(M), size=M, replace=False) if M > 0 else []
             for j in j_list:
 
                 i = N + d*M +  j
 
-                # compute cavity
-                eta_cav_fp, theta_cav_fp = f_posterior.mu[i]/f_posterior.Sigma_diag[i] - eta_fp[j], 1./f_posterior.Sigma_diag[i] - theta_fp[j]
-                eta_cav_g, theta_cav_g = g_posterior.mu[j]/g_posterior.Sigma_diag[j] - g_ga_approx.v[j], 1./g_posterior.Sigma_diag[j] - g_ga_approx.tau[j]
+                # update cavities for f & g
+                f_cavity._update_i(eta=eta, ga_approx=f_ga_approx, post_params=f_posterior, i=i)
+                g_cavity._update_i(eta=eta, ga_approx=g_ga_approx, post_params=g_posterior, i=j)
 
-                # transform to means and variances
-                m_cav_fp, v_cav_fp = eta_cav_fp/theta_cav_fp, 1./theta_cav_fp
-                m_cav_g, v_cav_g = eta_cav_g/theta_cav_g, 1./theta_cav_g
+                # match moments
+                mom_f, mom_g = match_moments_fg(f_cavity.v[i], f_cavity.tau[i], g_cavity.v[j], g_cavity.tau[j], nu2, moment_function)
 
-                if v_cav_fp <= 0 or v_cav_g <= 0:
-                    print('Negative cavity variance for site %d! Skipping...' % j)
-                    continue
+                # update marginal moments
+                f_marg_moments.Z_hat[i], f_marg_moments.mu_hat[i], f_marg_moments.sigma2_hat[i] = mom_f
+                g_marg_mom.Z_hat[j], g_marg_mom.mu_hat[j], g_marg_mom.sigma2_hat[j] = mom_g
 
-                # compute moments
-                Z, site_fp_m, site_fp_m2, site_g_m, site_g_m2 = moment_function(m_cav_fp, v_cav_fp, m_cav_g, v_cav_g, nu2=nu2)
-
-                if Z == 0 or np.isnan(Z):
-                    print('Z = 0 occured, skipping...')
-                    continue
-
-                # variances
-                site_fp_v = site_fp_m2 - site_fp_m**2
-                site_g_v = site_g_m2 - site_g_m**2
-
-                # new sites
-                new_eta_fp, new_theta_fp = site_fp_m/site_fp_v - eta_cav_fp, 1./site_fp_v - theta_cav_fp
-                new_eta_g, new_theta_g = site_g_m/site_g_v - eta_cav_g, 1./site_g_v - theta_cav_g
-
-                if new_theta_fp <= 0:
-                    new_theta_fp = 1e-6
-                    new_variance_fp = 1./(new_theta_fp + theta_cav_fp)
-                    new_eta_fp = site_fp_m/new_variance_fp - eta_cav_fp
-
-                if new_theta_g <= 0:
-                    new_theta_g = 1e-6
-                    new_variance_g = 1./(new_theta_g + theta_cav_g)
-                    new_eta_g = site_g_m/new_variance_g - eta_cav_g
-
-
-                # update site
-                eta_fp[i] = (1-alpha)*eta_fp[i] + alpha*new_eta_fp
-                theta_fp[i] = (1-alpha)*theta_fp[i] + alpha*new_theta_fp
-
-                g_ga_approx.v[j] = (1-alpha)*g_ga_approx.v[j] + alpha*new_eta_g
-                g_ga_approx.tau[j] = (1-alpha)*g_ga_approx.tau[j] + alpha*new_theta_g
+                # update sites
+                f_ga_approx._update_i(eta=eta, delta=alpha, post_params=f_posterior, marg_moments=f_marg_moments, i=i)
+                g_ga_approx._update_i(eta=eta, delta=alpha, post_params=g_posterior, marg_moments=g_marg_mom, i=j)
 
             # update posterior
             g_posterior_list[d] = update_posterior(Kg_list[d], g_ga_approx.v, g_ga_approx.tau)
-            f_posterior = update_posterior(Kf, eta_fp + eta_y, theta_fp + theta_y)
+            f_posterior = update_posterior(Kf, f_ga_approx.v + eta_y, f_ga_approx.tau + theta_y)
 
       # check for convergence
         new_params = np.hstack((f_posterior.mu, f_posterior.Sigma_diag)) # , mu_g, Sigma_g
@@ -209,11 +183,16 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     #############################################################################3
 
     # multivariate terms likelihood
-    f_term = compute_marginal_likelihood_mvn(f_posterior, eta_fp + eta_y, theta_fp + theta_y, skip_problematic=N)
+    f_term = compute_marginal_likelihood_mvn(f_posterior, f_ga_approx.v + eta_y, f_ga_approx.tau + theta_y, skip_problematic=N)
     g_terms = [compute_marginal_likelihood_mvn(g_posterior, g_ga_approx.v, g_ga_approx.tau, skip_problematic=0)  for d, g_posterior in zip(range(D), g_posterior_list)]
 
     log_k1, log_k2 = 0, 0
     log_c1, log_c2, log_c3, log_c4 = 0, 0, 0, 0
+
+    eta_fp = f_ga_approx.v
+    theta_fp = f_ga_approx.tau
+
+
 
     for d in range(D):
 
@@ -224,6 +203,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
 
         eta_gp = eta_g
         theta_gp = theta_g
+
 
         mu_g, Sigma_g = g_posterior_list[d].mu, g_posterior_list[d].Sigma_diag
         eta_cav, theta_cav = mu_g[M:]/Sigma_g[M:] - eta_gp[M:], 1./Sigma_g[M:] - theta_gp[M:]
@@ -320,4 +300,20 @@ def match_moments_g(m, eta_cav, theta_cav, nu):
     site_v = site_m2 - site_m**2
 
     return Z, site_m, site_v
+
+
+def match_moments_fg(eta_cav_fp, theta_cav_fp, eta_cav_g, theta_cav_g, nu2, moment_function):
+
+    # transform to means and variances
+    m_cav_fp, v_cav_fp = eta_cav_fp/theta_cav_fp, 1./theta_cav_fp
+    m_cav_g, v_cav_g = eta_cav_g/theta_cav_g, 1./theta_cav_g
+
+    # compute moments
+    Z, site_fp_m, site_fp_m2, site_g_m, site_g_m2 = moment_function(m_cav_fp, v_cav_fp, m_cav_g, v_cav_g, nu2=nu2)
+
+    # variances
+    site_fp_v = site_fp_m2 - site_fp_m**2
+    site_g_v = site_g_m2 - site_g_m**2
+
+    return (Z, site_fp_m, site_fp_v), (Z, site_g_m, site_g_v)
 

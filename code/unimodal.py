@@ -62,7 +62,7 @@ class UnimodalGP(GPy.core.Model):
     def parameters_changed(self):
 
         # Run EP
-        self.f_posterior, self.g_posterior_list, Kf, self._log_lik, self.grad_dict = ep.ep_unimodality(self.Xf, self.Xg, self.X, self.Y, Kf_kernel=self.Kf_kernel.copy(), Kg_kernel_list=self.Kg_kernel_list, sigma2=self.sigma2, t2=self.Xd, verbose=0, nu2=1., tol=1e-6, max_itt=100)
+        self.f_posterior, self.g_posterior_list, Kf, self._log_lik, self.grad_dict = ep.ep_unimodality(self.Xf, self.Xg, self.X, self.Y, Kf_kernel=self.Kf_kernel.copy(), Kg_kernel_list=self.Kg_kernel_list, sigma2=self.sigma2, t2=self.Xd, verbose=0, nu2=1., tol=1e-10, max_itt=100)
 
         # update gradients for f
         self.Kf_kernel.update_gradients_full(self.grad_dict['dL_dK_f'], self.Xf)

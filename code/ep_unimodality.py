@@ -5,7 +5,7 @@ from scipy.stats import norm
 from scipy.misc import logsumexp
 
 import GPy
-from GPy.inference.latent_function_inference.expectation_propagation import posteriorParams
+from GPy.inference.latent_function_inference.expectation_propagation import posteriorParams, marginalMoments
 from GPy.util.linalg import  dtrtrs, dpotrs, tdot, symmetrify, jitchol
 
 from probit_moments import ProbitMoments
@@ -84,7 +84,10 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     f_posterior = update_posterior(Kf, eta_fp + eta_y, theta_fp + theta_y)
     g_posterior_list = [update_posterior(Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d]) for d in range(D)]
 
-
+    ###################################################################################
+    # Prepare marginal moments containers
+    ###################################################################################
+    g_marg_moments_list = [marginalMoments((2*M)) for d in range(D)]
 
 
     ###################################################################################
@@ -110,21 +113,18 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
                 i = M + j
 
                 # compute cavity
-                eta_cav, theta_cav = g_posterior.mu[i]/g_posterior.Sigma_diag[i] - eta_gp[d, j], 1./g_posterior.Sigma_diag[i] - theta_gp[d, j]
-                m_cav, v_cav = eta_cav/theta_cav, 1./theta_cav
+                eta_cav, theta_cav = g_posterior.mu[i]/g_posterior.Sigma_diag[i] - eta_gp[d, i], 1./g_posterior.Sigma_diag[i] - theta_gp[d, i]
 
-                if v_cav <= 0:
-                    print('EP: Negative cavity observed at site %d in dim %d in iteration %d, skipping update' % (j, d, itt + 1))
+                if theta_cav <= 0:
+                    print('EP: Negative cavity observed at site j = %d in dim %d in iteration %d, skipping update' % (j, d, itt + 1))
                     continue
 
-                # compute moments
-                Z, site_m, site_m2 = ProbitMoments.compute_moments(m=0, v=1./(m.ravel()[j]*nu), mu=m_cav, sigma2=v_cav, return_normalizer=True, normalized=True)
+                # match moments
+                g_marg_moments_list[d].Z_hat[i], g_marg_moments_list[d].mu_hat[i], g_marg_moments_list[d].sigma2_hat[i] = match_moments_g(m[d,j], eta_cav, theta_cav, nu)
 
-                # variance
-                site_v = site_m2 - site_m**2
-
-                new_eta = site_m/site_v - eta_cav
-                new_theta = 1./site_v - theta_cav
+                # update moments
+                new_eta = g_marg_moments_list[d].mu_hat[i]/g_marg_moments_list[d].sigma2_hat[i] - eta_cav
+                new_theta = 1./g_marg_moments_list[d].sigma2_hat[i] - theta_cav
 
                 if new_theta < 0:
                     new_theta = 1e-6
@@ -298,3 +298,18 @@ def compute_marginal_likelihood_mvn(posterior, eta, theta, skip_problematic=None
     quadterm = 0.5*np.sum(b**2)
 
     return -0.5*len(mu)*np.log(2*np.pi)  - logdet - quadterm
+
+
+def match_moments_g(m, eta_cav, theta_cav, nu):
+
+    # compute mean and variance of cavity
+    m_cav, v_cav = eta_cav/theta_cav, 1./theta_cav
+
+    # compute moments
+    Z, site_m, site_m2 = ProbitMoments.compute_moments(m=0, v=1./(m*nu), mu=m_cav, sigma2=v_cav, return_normalizer=True, normalized=True)
+    
+    # compute variance
+    site_v = site_m2 - site_m**2
+
+    return Z, site_m, site_v
+

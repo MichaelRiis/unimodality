@@ -137,8 +137,6 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
             # update joint
             g_posterior_list[d] = update_posterior(Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d])
 
-
-
       # approximate constraints to enforce a single sign change for f'
         d_list = np.random.choice(range(D), size=D, replace=False)
         for d in d_list:
@@ -220,14 +218,14 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
 
     for d in range(D):
 
-        mu_g, Sigma_g, Lg = g_posterior_list[d].mu, g_posterior_list[d].Sigma_diag, g_posterior_list[d].L
-        eta_cav, theta_cav = mu_g/Sigma_g - eta_gp, 1./Sigma_g - theta_gp
+        mu_g, Sigma_g = g_posterior_list[d].mu, g_posterior_list[d].Sigma_diag
+        eta_cav, theta_cav = mu_g[M:]/Sigma_g[M:] - eta_gp[d, M:], 1./Sigma_g[M:] - theta_gp[d, M:]
         mu_cav, tau_cav = eta_cav/theta_cav, 1./theta_cav
 
         # log k_i
-        log_k1 += np.sum(ProbitMoments.compute_normalization(m=0, v=1./(nu*m), mu=mu_cav[:, M:], sigma2= tau_cav[:, M:], log=True))
+        log_k1 += np.sum(ProbitMoments.compute_normalization(m=0, v=1./(nu*m[d, :]), mu=mu_cav, sigma2= tau_cav, log=True))
         log_k2_prob = 0 #*0.5*np.sum(-np.log(theta_gp[:, M:]))
-        log_k2 += log_k2_prob + 0.5*np.sum(np.log(tau_cav[:, M:]*theta_gp[:, M:] + 1)) + 0.5*np.sum((mu_cav[:, M:] - eta_gp[:, M:]/theta_gp[:, M:])**2/(tau_cav[:, M:] + 1./theta_gp[:, M:]))
+        log_k2 += log_k2_prob + 0.5*np.sum(np.log(1 + theta_gp[d, M:]/theta_cav)) + 0.5*np.sum((mu_cav - eta_gp[d, M:]/theta_gp[d, M:])**2/(tau_cav + 1./theta_gp[d, M:]))
 
         # log c_i
         fp_slice = slice(N + d*M, N + (d+1)*M)
@@ -243,8 +241,6 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
         log_A3 = ProbitMoments.compute_normalization(m=0, v=1./nu2, mu=m_cav_fp, sigma2=v_cav_fp, log=True)
         log_A4 = ProbitMoments.compute_normalization(m=0, v=1., mu=m_cav_g, sigma2=v_cav_g, log=True)
 
-
-        # log_c1, log_c2 = np.sum(logsumexp(np.row_stack((log_A1 + log_A2, log_A3 + log_A4)), axis = 0, keepdims=True)), 0
         log_c1 += np.sum(logsumexp(np.row_stack((log_A1 + log_A2, log_A3 + log_A4)), axis = 0, keepdims=True))
         log_c2 += 0
 
@@ -252,15 +248,14 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
         log_c3_prob = 0#0*0.5*np.sum(-np.log(theta_fp[N:]))
         log_c4_prob = 0#0*0.5*np.sum(-np.log(theta_g[:, :M]))
 
-        log_c3 += log_c3_prob + 0.5*np.sum(np.log(v_cav_fp*theta_fp[fp_slice] +1)) + 0.5*np.sum((m_cav_fp - eta_fp[fp_slice]/theta_fp[fp_slice])**2/(v_cav_fp + 1./theta_fp[fp_slice]))
-        log_c4 += log_c4_prob + 0.5*np.sum(np.log(v_cav_g*theta_g[:, :M] + 1)) + 0.5*np.sum((m_cav_g - eta_g[d, :M]/theta_g[d, :M])**2/(v_cav_g + 1./theta_g[d, :M]))
+        log_c3 += log_c3_prob + 0.5*np.sum(np.log(1 + theta_fp[fp_slice]/theta_cav_fp)) + 0.5*np.sum((m_cav_fp - eta_fp[fp_slice]/theta_fp[fp_slice])**2/(v_cav_fp + 1./theta_fp[fp_slice]))
+        log_c4 += log_c4_prob + 0.5*np.sum(np.log(1 + theta_g[:, :M]/theta_cav_g)) + 0.5*np.sum((m_cav_g - eta_g[d, :M]/theta_g[d, :M])**2/(v_cav_g + 1./theta_g[d, :M]))
 
     logZ = log_k1 + log_k2 + log_c1 + log_c2 + log_c3 + log_c4 +  f_term + np.sum(g_terms)
 
     #############################################################################3
     # handle gradients for f and each g
     #############################################################################3
-
     grad_dict = {'dL_dK_f': compute_dl_dK(f_posterior, Kf, eta_fp + eta_y, theta_fp + theta_y)}
     
     for d in range(D):
@@ -287,9 +282,9 @@ def compute_dl_dK(posterior, K, eta, theta, prior_mean = 0):
 
 def compute_marginal_likelihood_mvn(posterior, eta, theta, skip_problematic=None):
 
-    L, mu, Sigma = posterior.L, posterior.mu, posterior.Sigma
+    mu, Sigma = posterior.mu, posterior.Sigma
     
-    b = np.linalg.solve(L, eta/np.sqrt(theta))
+    b = np.linalg.solve(posterior.L, eta/np.sqrt(theta))
 
     # skip problematic term that will cancel out later?
     if skip_problematic is None:
@@ -299,7 +294,7 @@ def compute_marginal_likelihood_mvn(posterior, eta, theta, skip_problematic=None
     elif skip_problematic > 0:
         problematic_term = - np.sum(np.log(np.sqrt(theta[:skip_problematic])))
 
-    logdet = np.sum(np.log(np.diag(L))) + problematic_term
+    logdet = np.sum(np.log(np.diag(posterior.L))) + problematic_term
     quadterm = 0.5*np.sum(b**2)
 
     return -0.5*len(mu)*np.log(2*np.pi)  - logdet - quadterm

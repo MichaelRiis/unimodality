@@ -57,14 +57,6 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
 
 
     ###################################################################################
-    # Initialize sites
-    ###################################################################################
-
-    # sites for likelihood 
-    eta_y, theta_y = np.zeros(Df), np.zeros(Df)
-    eta_y[:N], theta_y[:N] = y[:, 0]/sigma2, 1./sigma2
-
-    ###################################################################################
     # Contruct kernels
     ###################################################################################
     Kf = Kf_kernel.K(X1)
@@ -80,6 +72,10 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     f_ga_approx = gaussianApproximation(v=np.zeros(Df), tau=np.zeros(Df))
     f_cavity = cavityParams(Df) 
 
+    # insert likelihood information
+    f_ga_approx.v[:N] = y[:, 0]/sigma2
+    f_ga_approx.tau[:N] = 1./sigma2
+
     # for each g
     g_marg_moments_list = [marginalMoments(2*M) for d in range(D)]
     g_ga_approx_list = [gaussianApproximation(v=np.zeros(2*M), tau=np.zeros(2*M)) for d in range(D)]
@@ -91,7 +87,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     ###################################################################################
     # Prepare global approximations
     ###################################################################################
-    f_posterior = update_posterior(Kf, f_ga_approx.v + eta_y, f_ga_approx.tau + theta_y)
+    f_posterior = update_posterior(Kf, f_ga_approx.v, f_ga_approx.tau)
     g_posterior_list = [update_posterior(Kg_list[d], g_ga_approx_list[d].v, g_ga_approx_list[d].tau) for d in range(D)]
 
 
@@ -167,7 +163,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
 
             # update posterior
             g_posterior_list[d] = update_posterior(Kg_list[d], g_ga_approx.v, g_ga_approx.tau)
-            f_posterior = update_posterior(Kf, f_ga_approx.v + eta_y, f_ga_approx.tau + theta_y)
+            f_posterior = update_posterior(Kf, f_ga_approx.v, f_ga_approx.tau)
 
       # check for convergence
         new_params = np.hstack((f_posterior.mu, f_posterior.Sigma_diag)) # , mu_g, Sigma_g
@@ -183,7 +179,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     #############################################################################3
 
     # multivariate terms likelihood
-    f_term = compute_marginal_likelihood_mvn(f_posterior, f_ga_approx.v + eta_y, f_ga_approx.tau + theta_y, skip_problematic=N)
+    f_term = compute_marginal_likelihood_mvn(f_posterior, f_ga_approx.v, f_ga_approx.tau, skip_problematic=N)
     g_terms = [compute_marginal_likelihood_mvn(g_posterior, g_ga_approx.v, g_ga_approx.tau, skip_problematic=0)  for d, g_posterior in zip(range(D), g_posterior_list)]
 
     log_k1, log_k2 = 0, 0
@@ -243,7 +239,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     #############################################################################3
     # handle gradients for f and each g
     #############################################################################3
-    grad_dict = {'dL_dK_f': compute_dl_dK(f_posterior, Kf, eta_fp + eta_y, theta_fp + theta_y)}
+    grad_dict = {'dL_dK_f': compute_dl_dK(f_posterior, Kf, eta_fp, theta_fp)}
     
     for d in range(D):
         g_ga_approx = g_ga_approx_list[d]

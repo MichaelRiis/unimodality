@@ -5,7 +5,7 @@ from scipy.stats import norm
 from scipy.misc import logsumexp
 
 import GPy
-from GPy.inference.latent_function_inference.expectation_propagation import posteriorParams, marginalMoments
+from GPy.inference.latent_function_inference.expectation_propagation import posteriorParams, marginalMoments, gaussianApproximation, cavityParams
 from GPy.util.linalg import  dtrtrs, dpotrs, tdot, symmetrify, jitchol
 
 from probit_moments import ProbitMoments
@@ -85,9 +85,14 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     g_posterior_list = [update_posterior(Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d]) for d in range(D)]
 
     ###################################################################################
-    # Prepare marginal moments containers
+    # Prepare marginal moments, site approximation and cavity containers
     ###################################################################################
-    g_marg_moments_list = [marginalMoments((2*M)) for d in range(D)]
+    g_marg_moments_list = [marginalMoments(2*M) for d in range(D)]
+    g_ga_approx_list = [gaussianApproximation(v=np.zeros(2*M), tau=np.zeros(2*M)) for d in range(D)]
+    g_cavity_list = [cavityParams(2*M) for d in range(D)]
+
+    # hardcode eta to 1
+    eta = 1
 
 
     ###################################################################################
@@ -104,42 +109,36 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
         d_list = np.random.choice(range(D), size=D, replace=False)
         for d in d_list:
 
+            # get relevant EP parameters for dimension d
             g_posterior = g_posterior_list[d]
+            g_ga_approx = g_ga_approx_list[d]
+            g_cavity = g_cavity_list[d]
 
             j_list = np.random.choice(range(M), size=M, replace=False) if M > 0 else []
             for j in j_list:
 
-                # compute offset for gradient indices
+                # compute offset for radient indices
                 i = M + j
 
-                # compute cavity
-                eta_cav, theta_cav = g_posterior.mu[i]/g_posterior.Sigma_diag[i] - eta_gp[d, i], 1./g_posterior.Sigma_diag[i] - theta_gp[d, i]
-
-                if theta_cav <= 0:
-                    print('EP: Negative cavity observed at site j = %d in dim %d in iteration %d, skipping update' % (j, d, itt + 1))
-                    continue
+                # update cavity
+                g_cavity._update_i(eta=eta, ga_approx=g_ga_approx, post_params=g_posterior, i=i)
 
                 # match moments
-                g_marg_moments_list[d].Z_hat[i], g_marg_moments_list[d].mu_hat[i], g_marg_moments_list[d].sigma2_hat[i] = match_moments_g(m[d,j], eta_cav, theta_cav, nu)
+                g_marg_moments_list[d].Z_hat[i], g_marg_moments_list[d].mu_hat[i], g_marg_moments_list[d].sigma2_hat[i] = match_moments_g(m[d,j], g_cavity.v[i], g_cavity.tau[i], nu)
 
-                # update moments
-                new_eta = g_marg_moments_list[d].mu_hat[i]/g_marg_moments_list[d].sigma2_hat[i] - eta_cav
-                new_theta = 1./g_marg_moments_list[d].sigma2_hat[i] - theta_cav
+                # update
+                g_ga_approx._update_i(eta=eta, delta=alpha, post_params=g_posterior, marg_moments=g_marg_moments_list[d], i=i)
 
-                if new_theta < 0:
-                    new_theta = 1e-6
-                    new_variance = 1./(new_theta + theta_cav)
-                    new_eta = site_m/new_variance - eta_cav
-
-                # update site
-                eta_gp[d, i], theta_gp[d, i] = (1-alpha)*eta_gp[d, i] + alpha*new_eta, (1-alpha)*theta_gp[d, i] + alpha*new_theta
 
             # update joint
-            g_posterior_list[d] = update_posterior(Kg_list[d], eta_g[d] + eta_gp[d], theta_g[d] + theta_gp[d])
+            g_posterior_list[d] = update_posterior(Kg_list[d], eta_g[d] + g_ga_approx.v, theta_g[d] + g_ga_approx.tau)
 
       # approximate constraints to enforce a single sign change for f'
         d_list = np.random.choice(range(D), size=D, replace=False)
         for d in d_list:
+
+            eta_gp[d] = g_ga_approx_list[d].v.copy()   
+            theta_gp[d] = g_ga_approx_list[d].tau.copy()
 
             g_posterior = g_posterior_list[d]
             j_list = np.random.choice(range(M), size=M, replace=False) if M > 0 else []
@@ -208,6 +207,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     #############################################################################3
     # Marginal likelihood
     #############################################################################3
+
 
     # multivariate terms likelihood
     f_term = compute_marginal_likelihood_mvn(f_posterior, eta_fp + eta_y, theta_fp + theta_y, skip_problematic=N)

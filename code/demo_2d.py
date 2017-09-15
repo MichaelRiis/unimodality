@@ -58,8 +58,7 @@ kernel = GPy.kern.RBF(input_dim=D, lengthscale=scale, variance=variance) + GPy.k
 
 if N > 0:
     gpy_model = GPy.models.GPRegression(X=X, Y=y, kernel=kernel, noise_var=sigma2)
-    gpy_model.Gaussian_noise.fix()
-    # gpy_model.optimize()
+    gpy_model.optimize()
     mu_gpy, var_gpy = gpy_model.predict(Xp)
     mu_gpy = mu_gpy.reshape((len(xs), len(ys)))
     var_gpy = var_gpy.reshape((len(xs), len(ys)))
@@ -76,6 +75,16 @@ c1, c2 = 1., 4.
 
 # prepare f kernel
 f_kernel_base = GPy.kern.RBF(input_dim = D, lengthscale=scale, variance=variance) + GPy.kern.Bias(input_dim=D, variance=bias)
+
+# add priors
+f_kernel_base.parameters[0].variance.unconstrain()
+f_kernel_base.parameters[0].variance.set_prior(GPy.priors.StudentT(mu=0, sigma=4, nu=4))
+f_kernel_base.parameters[0].variance.constrain_positive()
+
+f_kernel_base.parameters[1].variance.unconstrain()
+f_kernel_base.parameters[1].variance.set_prior(GPy.priors.StudentT(mu=0, sigma=4, nu=4))
+f_kernel_base.parameters[1].variance.constrain_positive()
+
 
 # prepare g kernel
 g_kernel_base = GPy.kern.RBF(input_dim = D, lengthscale=c2, variance=c1) #+ GPy.kern.Bias(input_dim=D, variance=c3)

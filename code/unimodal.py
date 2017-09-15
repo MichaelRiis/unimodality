@@ -26,7 +26,9 @@ class UnimodalGP(GPy.core.Model):
         self.Xd = Xd
 
         # Fixed hyperparameters
-        self.sigma2 = sigma2
+        self.sigma2 = GPy.core.parameterization.Param('Noise variance', sigma2)
+        self.sigma2.constrain_positive()
+        self.link_parameter(self.sigma2)
 
         ###################################################################################
         # Contruct kernel for f
@@ -63,6 +65,9 @@ class UnimodalGP(GPy.core.Model):
 
         # Run EP
         self.f_posterior, self.g_posterior_list, Kf, self._log_lik, self.grad_dict = ep.ep_unimodality(self.Xf, self.Xg, self.X, self.Y, Kf_kernel=self.Kf_kernel.copy(), Kg_kernel_list=self.Kg_kernel_list, sigma2=self.sigma2, t2=self.Xd, verbose=0, nu2=1., tol=1e-10, max_itt=100)
+
+        # update gradients for noise variance
+        self.sigma2.gradient = np.sum(np.diag(self.grad_dict['dL_dK_f'])[:self.N])
 
         # update gradients for f
         self.Kf_kernel.update_gradients_full(self.grad_dict['dL_dK_f'], self.Xf)

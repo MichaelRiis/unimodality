@@ -55,7 +55,7 @@ kernel = GPy.kern.RBF(input_dim=D, lengthscale=scale, variance=variance) + GPy.k
 
 # fit initial model
 gpy_model = GPy.models.GPRegression(X=X, Y=y, kernel=kernel, noise_var=sigma2)
-gpy_model.Gaussian_noise.fix()	
+# gpy_model.Gaussian_noise.fix()	
 gpy_model.optimize()
 
 # make predictions

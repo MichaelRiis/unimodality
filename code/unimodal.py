@@ -128,10 +128,12 @@ class UnimodalGP(GPy.core.Model):
         if not full_cov:
             pred_cov = np.diag(pred_cov)
 
-
         return pred_mean, pred_cov
-
-
+    
+    def predictive_gradients(self, Xnew):
+        pred_mean, pred_cov =  self.predict_g(Xnew)
+        return np.reshape(pred_mean, (pred_mean.shape[0], self.D,1)), pred_cov
+        
     def sample_z_probabilities(self, Xnew, g_index=0, num_samples=1000):
 
         pred_mean, pred_cov = self.predict_g(Xnew, g_index=g_index, full_cov=True)
@@ -149,11 +151,21 @@ class UnimodalGP(GPy.core.Model):
         
         if Y_metadata is not None:
             print('Provided meta data is not used!')
-
         mu_test, var_test = self.predict(Xtest)
         return ep.log_npdf(ytest, mu_test[:, None], var_test[:, None])
 
-
+    def set_XY(self, X=None, Y=None, Xd=None):
+        self.N, self.D = X.shape
+        if(Xd is not None):
+            self.M = Xd.shape[0]
+            self.Xd = Xd
+        self.update_model(False)
+        if Y is not None:
+            self.Y = paramz.ObsAr(Y)
+            self.Y_normalized = self.Y
+        if X is not None:
+            self.X = paramz.ObsAr(X)
+        self.update_model(True)
 
 
 

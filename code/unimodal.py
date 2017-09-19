@@ -76,6 +76,7 @@ class UnimodalGP(GPy.core.Model):
         for d in range(self.D):
             self.Kg_kernel_list[d].update_gradients_full(self.grad_dict['dL_dK_g%d' % d], self.Xg)
 
+
     def log_likelihood(self):
         return self._log_lik
 
@@ -84,56 +85,27 @@ class UnimodalGP(GPy.core.Model):
         if Y_metadata is not None:
             print('Provided meta data is not used!')
 
-        if full_cov:
-            raise NotImplementedError('Fullcov not implemented')
-
         # augment Xnew with kernel index
         Xp = np.column_stack(  (Xnew, np.zeros((len(Xnew), 1))) )
 
-        # construct kernels
-        Kff = self.Kf_kernel.K(self.Xf)
-        Kpp = self.Kf_kernel.K(Xp, Xp)
-        Kpf = self.Kf_kernel.K(Xp, self.Xf)
-
-        # Compute predictive distributions
-        H =  np.linalg.solve(Kff, Kpf.T)
-        pred_mean = np.dot(H.T, self.f_posterior.mu)
-        pred_cov = Kpp -  np.dot(Kpf, H) + np.dot(H.T, np.dot(self.f_posterior.Sigma, H))
-
-        # if not full_cov:
-        pred_var_ = np.diag(pred_cov)
+        # predict
+        pred_mean, pred_var = self.f_posterior._raw_predict(self.Kf_kernel, Xp, self.Xf, full_cov=full_cov)
 
         if include_likelihood:
-            pred_var = pred_var_ + self.sigma2
+            pred_var = pred_var + self.sigma2
 
         return pred_mean, pred_var
 
 
     def predict_g(self, Xnew, g_index=0, full_cov=False):
-        mu_g, Sigma_full_g = self.g_posterior_list[g_index].mu, self.g_posterior_list[g_index].Sigma
 
         # augment Xnew with kernel index
         Xp = np.column_stack(  (Xnew, np.zeros((len(Xnew), 1))) )
 
-        # concatenate and augment Xd + Xd with kernel indeces (equal to self.Xf when predicting f)
-        Xg = np.column_stack(  (self.Xd, np.zeros((self.M, 1))) )
-        Xg = np.row_stack([Xg] + [np.column_stack(  (self.Xd, np.ones((self.M, 1))) )])
+        # predict
+        pred_mean, pred_var = self.g_posterior_list[g_index]._raw_predict(self.Kg_kernel_list[g_index], Xp, self.Xg, full_cov=full_cov)
 
-        # construct kernels
-        Kg_kernel = self.Kg_kernel_list[g_index]
-        Kgg = Kg_kernel.K(Xg)
-        Kpp = Kg_kernel.K(Xp, Xp)
-        Kpg = Kg_kernel.K(Xp, Xg)
-
-        # Compute predictive distributions
-        H =  np.linalg.solve(Kgg, Kpg.T)
-        pred_mean = np.dot(H.T, mu_g)
-        pred_cov = Kpp -  np.dot(Kpg, H) + np.dot(H.T, np.dot(Sigma_full_g, H))
-
-        if not full_cov:
-            pred_cov = np.diag(pred_cov)
-
-        return pred_mean, pred_cov
+        return pred_mean, pred_var
     
     def predictive_gradients(self, Xnew):
         pred_mean, pred_cov =  self.predict_g(Xnew)
@@ -146,7 +118,7 @@ class UnimodalGP(GPy.core.Model):
 
         L = np.linalg.cholesky(pred_cov + 1e-6*np.identity(D)) 
 
-        zs = pred_mean[:, None] + np.dot(L, np.random.normal(0, 1, size=(D, num_samples)))
+        zs = pred_mean + np.dot(L, np.random.normal(0, 1, size=(D, num_samples)))
         pzs = ep.phi(zs)
 
         return np.mean(pzs, axis = 1), np.var(pzs, axis = 1)    

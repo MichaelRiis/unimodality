@@ -165,7 +165,7 @@ plt.title('Cross section plot')
 if M > 1:
 
     plt.subplot(2, 3, 5)
-    mu_g = unimodal_model.g_posterior_list[0].mu[:(len(x1)*len(x2))].reshape((len(x1), len(x2)))
+    mu_g = unimodal_model.g_posterior_list[0].mean[:(len(x1)*len(x2))].reshape((len(x1), len(x2)))
     plt.contourf(xs, xs, ep.phi(mu_ep_g1/np.sqrt(1+var_ep_g1)), 30)
     plt.plot(Xd[:, 0], Xd[:, 1], 'k.', markersize = 2, alpha=0.75)
     plt.colorbar()

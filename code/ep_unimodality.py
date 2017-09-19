@@ -89,8 +89,8 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     ###################################################################################
     # Prepare global approximations
     ###################################################################################
-    f_posterior = update_posterior(Kf, f_ga_approx.v, f_ga_approx.tau)
-    g_posterior_list = [update_posterior(Kg_list[d], g_ga_approx_list[d].v, g_ga_approx_list[d].tau) for d in range(D)]
+    f_post_params = update_posterior(Kf, f_ga_approx.v, f_ga_approx.tau)
+    g_post_params_list = [update_posterior(Kg_list[d], g_ga_approx_list[d].v, g_ga_approx_list[d].tau) for d in range(D)]
 
 
 
@@ -99,7 +99,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     ###################################################################################
     for itt in range(max_itt):
 
-        old_params = np.hstack((f_posterior.mu, f_posterior.Sigma_diag)) # , mu_g, Sigma_g
+        old_params = np.hstack((f_post_params.mu, f_post_params.Sigma_diag)) # , mu_g, Sigma_g
 
         if verbose > 0:
             print('Iteration %d' % (itt + 1))
@@ -109,7 +109,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
         for d in d_list:
 
             # get relevant EP parameters for dimension d
-            g_posterior = g_posterior_list[d]
+            g_posterior = g_post_params_list[d]
             g_ga_approx = g_ga_approx_list[d]
             g_cavity = g_cavity_list[d]
             g_marg_mom = g_marg_moments_list[d]
@@ -135,14 +135,14 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
 
 
             # update joint
-            g_posterior_list[d] = update_posterior(Kg_list[d], g_ga_approx.v, g_ga_approx.tau)
+            g_post_params_list[d] = update_posterior(Kg_list[d], g_ga_approx.v, g_ga_approx.tau)
 
       # approximate constraints to enforce a single sign change for f'
         d_list = np.random.choice(range(D), size=D, replace=False)
         for d in d_list:
 
             # get relevant EP parameters for dimension d
-            g_posterior = g_posterior_list[d]
+            g_posterior = g_post_params_list[d]
             g_ga_approx = g_ga_approx_list[d]
             g_cavity = g_cavity_list[d]
             g_marg_mom = g_marg_moments_list[d]
@@ -153,7 +153,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
                 i = N + d*M +  j
 
                 # update cavities for f & g
-                f_cavity._update_i(eta=eta, ga_approx=f_ga_approx, post_params=f_posterior, i=i)
+                f_cavity._update_i(eta=eta, ga_approx=f_ga_approx, post_params=f_post_params, i=i)
                 g_cavity._update_i(eta=eta, ga_approx=g_ga_approx, post_params=g_posterior, i=j)
 
                 # match moments
@@ -168,15 +168,15 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
                 g_marg_mom.Z_hat[j], g_marg_mom.mu_hat[j], g_marg_mom.sigma2_hat[j] = mom_g
 
                 # update sites
-                f_ga_approx._update_i(eta=eta, delta=alpha, post_params=f_posterior, marg_moments=f_marg_moments, i=i)
+                f_ga_approx._update_i(eta=eta, delta=alpha, post_params=f_post_params, marg_moments=f_marg_moments, i=i)
                 g_ga_approx._update_i(eta=eta, delta=alpha, post_params=g_posterior, marg_moments=g_marg_mom, i=j)
 
             # update posterior
-            g_posterior_list[d] = update_posterior(Kg_list[d], g_ga_approx.v, g_ga_approx.tau)
-            f_posterior = update_posterior(Kf, f_ga_approx.v, f_ga_approx.tau)
+            g_post_params_list[d] = update_posterior(Kg_list[d], g_ga_approx.v, g_ga_approx.tau)
+            f_post_params = update_posterior(Kf, f_ga_approx.v, f_ga_approx.tau)
 
       # check for convergence
-        new_params = np.hstack((f_posterior.mu, f_posterior.Sigma_diag)) # , mu_g, Sigma_g
+        new_params = np.hstack((f_post_params.mu, f_post_params.Sigma_diag)) # , mu_g, Sigma_g
         if len(old_params) > 0 and np.mean((new_params-old_params)**2)/np.mean(old_params**2) < tol:
             run_time = time.time() - t0
 
@@ -190,35 +190,38 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
 
     # compute normalization constant for likelihoods
     for i in range(N):
-        f_cavity._update_i(eta=eta, ga_approx=f_ga_approx, post_params=f_posterior, i=i)
+        f_cavity._update_i(eta=eta, ga_approx=f_ga_approx, post_params=f_post_params, i=i)
         f_marg_moments.Z_hat[i] = npdf(y[i, 0], f_cavity.v[i]/f_cavity.tau[i], 1./f_cavity.tau[i] + sigma2)
 
 
     # marginal likelihood and gradient contribution from f
     Z_tilde = _log_Z_tilde(f_marg_moments, f_ga_approx, f_cavity)
-    f_post, f_logZ, f_grad = _inference(Kf, f_ga_approx, f_cavity, None, Z_tilde)
+    f_posterior, f_logZ, f_grad = _inference(Kf, f_ga_approx, f_cavity, None, Z_tilde)
     grad_dict = {'dL_dK_f': f_grad['dL_dK']}
 
     # marginal likelihood and gradient contribution from each g
-    g_logZs = []
-    g_grads = []
+    g_logZs_list = []
+    g_grads_list = []
+    g_posterior_list = []
     for d in range(D):
         Z_tilde = _log_Z_tilde(g_marg_moments_list[d], g_ga_approx_list[d], g_cavity_list[d])
-        g_post, g_logZ, g_grad = _inference(Kg_list[d], g_ga_approx_list[d], g_cavity_list[d], None, Z_tilde)
+        g_post_ep, g_logZ, g_grad = _inference(Kg_list[d], g_ga_approx_list[d], g_cavity_list[d], None, Z_tilde)
 
-        g_logZs.append(g_logZ)
-        g_grads.append(g_grad)
+        g_logZs_list.append(g_logZ)
+        g_grads_list.append(g_grad)
+        g_posterior_list.append(g_post_ep)
 
     
     for d in range(D):
-        grad_dict['dL_dK_g%d' % d] = g_grads[d]['dL_dK']
+        grad_dict['dL_dK_g%d' % d] = g_grads_list[d]['dL_dK']
 
     # sum contributions
-    logZ = f_logZ + np.sum(g_logZs)
+    logZ = f_logZ + np.sum(g_logZs_list)
 
 
     # Done
     return f_posterior, g_posterior_list, Kf, logZ, grad_dict#, mu_g, Sigma_g, Sigma_full_g, logZ
+    # return f_post_params, f_post_ep, Kf, logZ, grad_dict#, mu_g, Sigma_g, Sigma_full_g, logZ
 
 def compute_dl_dK(posterior, K, eta, theta, prior_mean = 0):
     tau, v = theta, eta

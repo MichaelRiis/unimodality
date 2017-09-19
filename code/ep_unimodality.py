@@ -267,6 +267,9 @@ def match_moments_g(m, eta_cav, theta_cav, nu):
     # compute variance
     site_v = site_m2 - site_m**2
 
+    if np.any(np.isnan([Z, site_m, site_v])):
+        raise AssertionError()
+
     return Z, site_m, site_v
 
 
@@ -282,6 +285,9 @@ def match_moments_fg(eta_cav_fp, theta_cav_fp, eta_cav_g, theta_cav_g, nu2, mome
     # variances
     site_fp_v = site_fp_m2 - site_fp_m**2
     site_g_v = site_g_m2 - site_g_m**2
+
+    if np.any(np.isnan([Z, site_fp_m, site_fp_v, site_g_m, site_g_v])):
+        raise AssertionError()
 
     return (Z, site_fp_m, site_fp_v), (1, site_g_m, site_g_v)
 

@@ -190,6 +190,7 @@ class UnimodalBayesianOptimization(BayesianOptimization):
             
             g_kernel_base = GPy.kern.RBF(input_dim = self.dim, lengthscale=g_lengthscale, variance=g_variance)
             g_kernel_base.variance.set_prior(GPy.priors.HalfT(1,1))
+            g_kernel_base.lengthscale.set_prior(GPy.priors.HalfT(1,1))
 
             lik = GPy.likelihoods.Gaussian(variance=self.noise)
             if self.noise < 0.00001:
@@ -197,10 +198,11 @@ class UnimodalBayesianOptimization(BayesianOptimization):
             else:
                 prior = GPy.priors.InverseGamma(3,0.25)
                 lik.variance.set_prior(prior)
-            M = 10
-            Xd = np.linspace(-1, 1, M)[:, None]
+
+            M = 20
+            Xd = np.linspace(0, 1, M)[:, None]
             
-            self.model = unimodal.UnimodalGP(X=X, Y=Y, Xd=Xd, f_kernel_base=f_kernel_base, g_kernel_base=g_kernel_base, sigma2=self.noise)
+            self.model = unimodal.UnimodalGP(X=X, Y=Y, Xd=Xd, f_kernel_base=f_kernel_base, g_kernel_base=g_kernel_base, likelihood=lik)
         else:
             self.model.set_XY(X, Y)
         start = time.time()
@@ -215,9 +217,9 @@ if __name__ == "__main__":
     if not os.path.exists(root):
         os.mkdir(root)
 
-    max_itt = 25
+    np.random.seed(0)
+    max_itt = 10
 
-    
     # Define test functions
     l = test_function_base.get_gaussian_functions(20,2,1)
     l_new0 = test_function_base.normalize_functions(l)
@@ -244,8 +246,9 @@ if __name__ == "__main__":
     uni_mu, uni_var = uni_bo.model.predict(xs)
     reg_mu, reg_var = bo.model.predict(xs)
 
+    plt.subplot(1, 2, 1)
     plot_with_uncertainty(xs, uni_mu, np.sqrt(uni_var), color='r', label='Unimodal')
-    plt.plot(Xu, Yu, 'r.')
+    plt.plot(Xu, Yu, 'r.', markersize=10)
 
     plot_with_uncertainty(xs, reg_mu, np.sqrt(reg_var), color='b', label='Regular')
     ytrue = [l_new0[0][0].do_evaluate(xi) for xi in xs]
@@ -254,4 +257,13 @@ if __name__ == "__main__":
     plt.plot(X, Y, 'b.')
     plt.grid(True)
     plt.legend()
+
+
+    plt.subplot(1, 2, 2)
+    plt.plot(Yu, 'r', label = 'Unimodal')
+    plt.plot(Y, 'b', label = 'Regular')
+    plt.legend()
+    plt.grid(True)
+    plt.xlabel('Iterations')
     plt.show()
+

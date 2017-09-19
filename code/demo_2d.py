@@ -103,7 +103,7 @@ X1, X2 = np.meshgrid(x1, x2)
 Xd = np.column_stack((X1.ravel(), X2.ravel()))
 
 # fit model
-unimodal_model = unimodal.UnimodalGP(X=X, Y=y, Xd=Xd, f_kernel_base=f_kernel_base, g_kernel_base=g_kernel_base, sigma2=sigma2)
+unimodal_model = unimodal.UnimodalGP(X=X, Y=y, Xd=Xd, f_kernel_base=f_kernel_base, g_kernel_base=g_kernel_base, likelihood=GPy.likelihoods.Gaussian(variance=sigma2))
 unimodal_model.optimize(messages=True)
 print(unimodal)
 

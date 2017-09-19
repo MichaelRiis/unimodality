@@ -1,6 +1,7 @@
 import numpy as np
 
 import GPy
+from GPy.likelihoods import Gaussian
 import paramz
 
 from copy import deepcopy
@@ -13,7 +14,7 @@ reload(ep)
 class UnimodalGP(GPy.core.Model):
 
 
-    def __init__(self, X, Y, Xd, f_kernel_base, g_kernel_base, sigma2, name='UnimodalGP'):
+    def __init__(self, X, Y, Xd, f_kernel_base, g_kernel_base, likelihood, name='UnimodalGP'):
 
         super(UnimodalGP, self).__init__(name=name)
 
@@ -25,10 +26,16 @@ class UnimodalGP(GPy.core.Model):
         self.Y = Y
         self.Xd = Xd
 
+        ###################################################################################
+        # Likelihood
+        ###################################################################################
         # Fixed hyperparameters
-        self.sigma2 = GPy.core.parameterization.Param('Noise variance', sigma2)
-        self.sigma2.constrain_positive()
-        self.link_parameter(self.sigma2)
+        # self.sigma2 = GPy.core.parameterization.Param('Noise variance', sigma2)
+        # self.sigma2.constrain_positive()
+        # self.link_parameter(self.sigma2)
+        assert(isinstance(likelihood, Gaussian)), "Only Gaussian likelihood is supported!"
+        self.likelihood = likelihood
+        self.link_parameter(self.likelihood)
 
         ###################################################################################
         # Contruct kernel for f
@@ -64,10 +71,10 @@ class UnimodalGP(GPy.core.Model):
     def parameters_changed(self):
 
         # Run EP
-        self.f_posterior, self.g_posterior_list, Kf, self._log_lik, self.grad_dict = ep.ep_unimodality(self.Xf, self.Xg, self.X, self.Y, Kf_kernel=self.Kf_kernel.copy(), Kg_kernel_list=self.Kg_kernel_list, sigma2=self.sigma2, t2=self.Xd, verbose=0, nu2=1., tol=1e-10, max_itt=100)
+        self.f_posterior, self.g_posterior_list, Kf, self._log_lik, self.grad_dict = ep.ep_unimodality(self.Xf, self.Xg, self.X, self.Y, Kf_kernel=self.Kf_kernel.copy(), Kg_kernel_list=self.Kg_kernel_list, sigma2=self.likelihood.variance, t2=self.Xd, verbose=0, nu2=1., tol=1e-10, max_itt=100)
 
         # update gradients for noise variance
-        self.sigma2.gradient = np.sum(np.diag(self.grad_dict['dL_dK_f'])[:self.N])
+        self.likelihood.variance.gradient = np.sum(np.diag(self.grad_dict['dL_dK_f'])[:self.N])
 
         # update gradients for f
         self.Kf_kernel.update_gradients_full(self.grad_dict['dL_dK_f'], self.Xf)
@@ -92,7 +99,7 @@ class UnimodalGP(GPy.core.Model):
         pred_mean, pred_var = self.f_posterior._raw_predict(self.Kf_kernel, Xp, self.Xf, full_cov=full_cov)
 
         if include_likelihood:
-            pred_var = pred_var + self.sigma2
+            pred_var = pred_var + self.likelihood.variance
 
         return pred_mean, pred_var
 

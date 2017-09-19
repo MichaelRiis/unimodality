@@ -13,6 +13,8 @@ import test_function_base
 from ep_unimodality import phi
 import unimodal 
 
+from util import plot_with_uncertainty
+
 def get_quantiles(fmin, m, s):
     '''
     Quantiles of the Gaussian distribution useful to determine the acquisition function values
@@ -187,6 +189,7 @@ class UnimodalBayesianOptimization(BayesianOptimization):
             g_variance, g_lengthscale = 1., 1.
             
             g_kernel_base = GPy.kern.RBF(input_dim = self.dim, lengthscale=g_lengthscale, variance=g_variance)
+            g_kernel_base.variance.set_prior(GPy.priors.HalfT(1,1))
 
             lik = GPy.likelihoods.Gaussian(variance=self.noise)
             if self.noise < 0.00001:
@@ -194,8 +197,8 @@ class UnimodalBayesianOptimization(BayesianOptimization):
             else:
                 prior = GPy.priors.InverseGamma(3,0.25)
                 lik.variance.set_prior(prior)
-            M = 20
-            Xd = np.linspace(-12, 12, M)[:, None]
+            M = 10
+            Xd = np.linspace(-1, 1, M)[:, None]
             
             self.model = unimodal.UnimodalGP(X=X, Y=Y, Xd=Xd, f_kernel_base=f_kernel_base, g_kernel_base=g_kernel_base, sigma2=self.noise)
         else:
@@ -211,21 +214,44 @@ if __name__ == "__main__":
     root = './results/'
     if not os.path.exists(root):
         os.mkdir(root)
-    print("BO with unimodal GP")
+
+    max_itt = 25
+
+    
+    # Define test functions
     l = test_function_base.get_gaussian_functions(20,2,1)
-    l_new = test_function_base.normalize_functions(l)
-    l_new = test_function_base.noisify_functions(l_new, 0.05)
-    bo = UnimodalBayesianOptimization(func_id=0, func = l_new[0][0], acquisition_function=EI, max_iter=2, noise = 0.05)
+    l_new0 = test_function_base.normalize_functions(l)
+    l_new = test_function_base.noisify_functions(l_new0, 0.05)        
+
+    print("BO with vanilla GP")
+    bo = BayesianOptimization(func_id=0, func = l_new[0][0], acquisition_function=EI, max_iter=max_itt, noise = 0.05)
     X,Y = bo.optimize()
+    path=root+'vanilla/'
+    if not os.path.exists(path):
+        os.mkdir(path)
+    bo.save_metrics(path)
+
+
+    print("BO with unimodal GP")
+    uni_bo = UnimodalBayesianOptimization(func_id=0, func = l_new[0][0], acquisition_function=EI, max_iter=max_itt, noise = 0.05)
+    Xu,Yu = uni_bo.optimize()
     path = root +'vanilla/'
     if not os.path.exists(path):
         os.mkdir(path)
-    bo.save_metrics(path)
+    uni_bo.save_metrics(path)
     
-    print("BO with vanilla GP")
-    bo = BayesianOptimization(func_id=0, func = l_new[0][0], acquisition_function=EI, max_iter=2, noise = 0.05)
-    X,Y = bo.optimize()
-    path=root+'unimodal/'
-    if not os.path.exists(path):
-        os.mkdir(path)
-    bo.save_metrics(path)
+    xs = np.linspace(0, 1, 1001)[:, None]
+    uni_mu, uni_var = uni_bo.model.predict(xs)
+    reg_mu, reg_var = bo.model.predict(xs)
+
+    plot_with_uncertainty(xs, uni_mu, np.sqrt(uni_var), color='r', label='Unimodal')
+    plt.plot(Xu, Yu, 'r.')
+
+    plot_with_uncertainty(xs, reg_mu, np.sqrt(reg_var), color='b', label='Regular')
+    ytrue = [l_new0[0][0].do_evaluate(xi) for xi in xs]
+    plt.plot(xs, ytrue, 'g--', linewidth = 2)
+
+    plt.plot(X, Y, 'b.')
+    plt.grid(True)
+    plt.legend()
+    plt.show()

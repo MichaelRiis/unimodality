@@ -90,7 +90,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     # Prepare global approximations
     ###################################################################################
     f_post_params = update_posterior(Kf, f_ga_approx.v, f_ga_approx.tau)
-    g_post_params_list = [update_posterior(Kg_list[d], g_ga_approx_list[d].v, g_ga_approx_list[d].tau) for d in range(D)]
+    g_post_params_list = [update_posterior(Kg_list[d], g_ga_approx_list[d].v, g_ga_approx_list[d].tau) for d in range(D) if M > 0]
 
 
 
@@ -107,6 +107,9 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
         # approximate constraints to enforce monotonicity to g
         d_list = np.random.choice(range(D), size=D, replace=False)
         for d in d_list:
+
+            if M == 0:
+                break
 
             # get relevant EP parameters for dimension d
             g_posterior = g_post_params_list[d]
@@ -140,6 +143,9 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
       # approximate constraints to enforce a single sign change for f'
         d_list = np.random.choice(range(D), size=D, replace=False)
         for d in d_list:
+
+            if M == 0:
+                break
 
             # get relevant EP parameters for dimension d
             g_posterior = g_post_params_list[d]
@@ -204,6 +210,10 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     g_grads_list = []
     g_posterior_list = []
     for d in range(D):
+
+        if M == 0:
+                break
+
         Z_tilde = _log_Z_tilde(g_marg_moments_list[d], g_ga_approx_list[d], g_cavity_list[d])
         g_post_ep, g_logZ, g_grad = _inference(Kg_list[d], g_ga_approx_list[d], g_cavity_list[d], None, Z_tilde)
 
@@ -211,9 +221,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
         g_grads_list.append(g_grad)
         g_posterior_list.append(g_post_ep)
 
-    
-    for d in range(D):
-        grad_dict['dL_dK_g%d' % d] = g_grads_list[d]['dL_dK']
+        grad_dict['dL_dK_g%d' % d] = g_grad['dL_dK']
 
     # sum contributions
     logZ = f_logZ + np.sum(g_logZs_list)

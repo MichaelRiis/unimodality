@@ -2,6 +2,8 @@ import numpy as np
 
 import GPy
 from GPy.likelihoods import Gaussian
+from GPy.util.multioutput import index_to_slices
+
 import paramz
 
 from copy import deepcopy
@@ -20,6 +22,8 @@ class UnimodalGP(GPy.core.Model):
 
         self.N, self.D = X.shape
         self.M = Xd.shape[0]
+
+        _, self.output_dim = Y.shape
 
         # store data
         self.X = X
@@ -81,6 +85,10 @@ class UnimodalGP(GPy.core.Model):
 
         # update gradients for each g
         for d in range(self.D):
+
+            if self.M == 0:
+                break
+
             self.Kg_kernel_list[d].update_gradients_full(self.grad_dict['dL_dK_g%d' % d], self.Xg)
 
 
@@ -113,10 +121,59 @@ class UnimodalGP(GPy.core.Model):
         pred_mean, pred_var = self.g_posterior_list[g_index]._raw_predict(self.Kg_kernel_list[g_index], Xp, self.Xg, full_cov=full_cov)
 
         return pred_mean, pred_var
+
+    @property
+    def _predictive_variable(self):
+        return self.Xf
     
-    def predictive_gradients(self, Xnew):
-        pred_mean, pred_cov =  self.predict_g(Xnew)
-        return np.reshape(pred_mean, (pred_mean.shape[0], self.D,1)), pred_cov
+    def predictive_gradients(self, Xnew_):
+        
+        """
+        Compute the derivatives of the predicted latent function with respect to X*
+        Given a set of points at which to predict X* (size [N*,Q]), compute the
+        derivatives of the mean and variance. Resulting arrays are sized:
+         dmu_dX* -- [N*, Q ,D], where D is the number of output in this GP (usually one).
+        Note that this is not the same as computing the mean and variance of the derivative of the function!
+         dv_dX*  -- [N*, Q],    (since all outputs have the same variance)
+        :param X: The points at which to get the predictive gradients
+        :type X: np.ndarray (Xnew x self.input_dim)
+        :returns: dmu_dX, dv_dX
+        :rtype: [np.ndarray (N*, Q ,D), np.ndarray (N*,Q) ]
+        """
+
+        Xnew = np.column_stack(  (Xnew_, np.zeros((len(Xnew_), 1))) )
+
+
+        kern = self.Kf_kernel
+        slices = index_to_slices(Xnew[:,-1])
+        
+        for i in range(len(slices)):
+            if ((kern.kern[i].name == 'diffKern' ) and len(slices[i])>0):
+                assert 0, "It is not (yet) possible to predict gradients of gradient observations, sorry :)"
+ 
+        mean_jac = np.empty((Xnew.shape[0],Xnew.shape[1]-1,self.output_dim))
+        for i in range(self.output_dim):
+            mean_jac[:,:,i] = kern.gradients_X(self.f_posterior.woodbury_vector[:,i:i+1].T, Xnew, self._predictive_variable)[:,0:-1]
+
+        # gradients wrt the diagonal part k_{xx}
+        dv_dX = kern.gradients_X(np.eye(Xnew.shape[0]), Xnew)[:,0:-1]
+        #grads wrt 'Schur' part K_{xf}K_{ff}^{-1}K_{fx}
+        if self.f_posterior.woodbury_inv.ndim == 3:
+            tmp = np.empty(dv_dX.shape + (self.f_posterior.woodbury_inv.shape[2],))
+            tmp[:] = dv_dX[:,:,None]
+            for i in range(self.f_posterior.woodbury_inv.shape[2]):
+                alpha = -2.*np.dot(kern.K(Xnew, self._predictive_variable), self.f_posterior.woodbury_inv[:, :, i])
+                tmp[:, :, i] += kern.gradients_X(alpha, Xnew, self._predictive_variable)
+        else:
+            tmp = dv_dX
+            alpha = -2.*np.dot(kern.K(Xnew, self._predictive_variable), self.f_posterior.woodbury_inv)
+            tmp += kern.gradients_X(alpha, Xnew, self._predictive_variable)[:,0:-1]
+        return mean_jac, tmp
+
+        # Xp = np.column_stack(  (Xnew, np.ones((len(Xnew), 1))) )
+        # pred_mean, pred_cov =  self.predict(Xnew)
+
+        # return np.reshape(pred_mean, (pred_mean.shape[0], self.D,1)), pred_cov
         
     def sample_z_probabilities(self, Xnew, g_index=0, num_samples=1000):
 

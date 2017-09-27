@@ -11,7 +11,10 @@ import copy
 import time
 import test_function_base
 from ep_unimodality import phi
+
+from importlib import reload
 import unimodal 
+reload(unimodal)
 
 from util import plot_with_uncertainty
 
@@ -120,7 +123,7 @@ class BayesianOptimization(object):
     def get_model(self, X, Y, noise=0., gp=None):
         if gp is None:
             ker_const = GPy.kern.Bias(input_dim=self.dim, variance=0.5)
-            ker_const.variance.constrain_fixed(value=0.5, warning=True, trigger_parent=True)
+            # ker_const.variance.constrain_fixed(value=0.5, warning=True, trigger_parent=True)
 
             ker_sexp = GPy.kern.RBF(input_dim=self.dim, variance=0.1, lengthscale=1.0, ARD=True)
             prior = GPy.priors.HalfT(1,1)
@@ -174,19 +177,25 @@ class BayesianOptimization(object):
     
 class UnimodalBayesianOptimization(BayesianOptimization):
 
+    def __init__(self, func_id, func, acquisition_function, bounds=None, max_iter=100, noise = 0.0, g_constraints=False):
+
+        self.g_constraints = g_constraints
+
+        super(UnimodalBayesianOptimization, self).__init__(func_id, func, acquisition_function, bounds, max_iter, noise)
+
+
+
     def get_model(self, X, Y, gp=None):
         if gp is None:
             ker_const = GPy.kern.Bias(input_dim=self.dim, variance=0.5)
             ker_const.variance.constrain_fixed(value=0.5, warning=True, trigger_parent=True)
 
             ker_sexp = GPy.kern.RBF(input_dim=self.dim, variance=0.1, lengthscale=1.0, ARD=True)
-            prior = GPy.priors.HalfT(1,1)
-            ker_sexp.lengthscale.set_prior(prior)
-            prior = GPy.priors.HalfT(1,1)
-            ker_sexp.variance.set_prior(prior)
+            ker_sexp.lengthscale.set_prior(GPy.priors.HalfT(1,1))
+            ker_sexp.variance.set_prior(GPy.priors.HalfT(1,1))
             f_kernel_base = ker_const + ker_sexp
             
-            g_variance, g_lengthscale = 1., 1.
+            g_variance, g_lengthscale = 0.1, 0.1
             
             g_kernel_base = GPy.kern.RBF(input_dim = self.dim, lengthscale=g_lengthscale, variance=g_variance)
             g_kernel_base.variance.set_prior(GPy.priors.HalfT(1,1))
@@ -199,12 +208,36 @@ class UnimodalBayesianOptimization(BayesianOptimization):
                 prior = GPy.priors.InverseGamma(3,0.25)
                 lik.variance.set_prior(prior)
 
-            M = 20
-            Xd = np.linspace(0, 1, M)[:, None]
-            
-            self.model = unimodal.UnimodalGP(X=X, Y=Y, Xd=Xd, f_kernel_base=f_kernel_base, g_kernel_base=g_kernel_base, likelihood=lik)
+
+            M = 10
+
+            if self.dim == 1:
+                Xd = np.linspace(0, 1, M)[:, None]
+            else:
+                x1 = np.linspace(0, 1, M)
+                x2 = np.linspace(0, 1, M)
+                X1, X2 = np.meshgrid(x1, x2)
+                Xd = np.column_stack((X1.ravel(), X2.ravel()))
+                assert(self.dim == 2)
+
+            if self.g_constraints:
+
+                if self.dim == 1:
+                    Xq = np.column_stack((Xd[[0, -1]], np.zeros((2, 1))))
+                    Yq = np.array([-1, 1])[:, None]
+                else:
+                    Xq = None
+                    Yq = None
+                    
+            else:
+                Xq = None
+                Yq = None
+
+            self.model = unimodal.UnimodalGP(X=X, Y=Y, Xd=Xd, f_kernel_base=f_kernel_base, g_kernel_base=g_kernel_base, likelihood=lik, Xq=Xq, Yq=Yq)
+
         else:
             self.model.set_XY(X, Y)
+
         start = time.time()
         self.model.optimize()
         end = time.time()
@@ -218,52 +251,124 @@ if __name__ == "__main__":
         os.mkdir(root)
 
     np.random.seed(0)
-    max_itt = 10
+    max_itt = 0
 
+
+    noise = 0.05
     # Define test functions
     l = test_function_base.get_gaussian_functions(20,2,1)
     l_new0 = test_function_base.normalize_functions(l)
-    l_new = test_function_base.noisify_functions(l_new0, 0.05)        
+    l_new = test_function_base.noisify_functions(l_new0, noise)        
 
-    print("BO with vanilla GP")
-    bo = BayesianOptimization(func_id=0, func = l_new[0][0], acquisition_function=EI, max_iter=max_itt, noise = 0.05)
-    X,Y = bo.optimize()
-    path=root+'vanilla/'
-    if not os.path.exists(path):
-        os.mkdir(path)
-    bo.save_metrics(path)
+    
+    num_probs = 10
+    f_idx = 0
 
+    # print("BO with vanilla GP")
+    # bo = BayesianOptimization(func_id=0, func = l_new[0][f_idx], acquisition_function=EI, max_iter=max_itt, noise = noise)
+    # X,Y = bo.optimize()
+    # path=root+'vanilla/'
+    # if not os.path.exists(path):
+    #     os.mkdir(path)
+    # bo.save_metrics(path)
 
     print("BO with unimodal GP")
-    uni_bo = UnimodalBayesianOptimization(func_id=0, func = l_new[0][0], acquisition_function=EI, max_iter=max_itt, noise = 0.05)
-    Xu,Yu = uni_bo.optimize()
-    path = root +'vanilla/'
-    if not os.path.exists(path):
-        os.mkdir(path)
-    uni_bo.save_metrics(path)
+    uni_bo = UnimodalBayesianOptimization(func_id=0, func = l_new[0][f_idx], acquisition_function=EI, max_iter=max_itt, noise = noise, g_constraints=False)
+    Xu, Yu = uni_bo.optimize()
+
+
+    fig = plt.figure(figsize = (20, 10))
+
+
+    for itt in range(10):
+
+        fig.clf()
+
+        xs = np.linspace(-0.5, 1.5, 101)
+
+        Xu, Yu = uni_bo.X, uni_bo.Y
+
+
+        mu, var = uni_bo.model.predict(xs)
+        mu_g, var_g = uni_bo.model.sample_z_probabilities(xs)
+
+        # acq
+        self = uni_bo
+        preds, _ = self.model.predict(self.X)
+        acq_n = lambda x: self.acq(np.array([x]), fmin = min(preds), model = self.model, n=self.X.shape[0], d=self.dim)
+        vals = -np.vstack([acq_n(xi)[0] for xi in xs])
+        x_new = self.maximize_acquisition()
+
+        # plot
+        plt.subplot(2, 2, 1)
+        plot_with_uncertainty(xs, mu, var, color='r')
+        plt.plot(xs, np.stack([l_new0[0][f_idx].do_evaluate(xi) for xi in xs]))
+        plt.plot(Xu, Yu, 'k.')
+        for bound in uni_bo.bounds[0]:
+            plt.axvline(bound, color='k', linestyle='--', alpha=0.5)
+
+        plt.grid(True)
+        plt.title('Iteration {}'.format(itt))
+
+
+
+        plt.subplot(2, 2, 2)
+        plot_with_uncertainty(xs, mu_g, var_g, color='r')
+        plt.grid(True)
+        plt.ylim((-0.1, 1.1))
+
+        # plot acq
+        plt.subplot(2, 2, 3)
+        plt.plot(xs, vals)
+        plt.title('Acquisition function')
+        plt.grid(True)
+
+        for bound in uni_bo.bounds[0]:
+            plt.axvline(bound, color='k', linestyle='--', alpha=0.5)
+
+        plt.axvline(x_new, color='g', alpha = 0.5)
+        fig.tight_layout()
+
+        plt.pause(1e-2)
+
+
+        plt.show(block = False)
+
+
+        self._add_point(x_new, force=False)
+
+
+
+    # path = root +'vanilla/'
+    # if not os.path.exists(path):
+    #     os.mkdir(path)
+    # uni_bo.save_metrics(path)
     
-    xs = np.linspace(0, 1, 1001)[:, None]
-    uni_mu, uni_var = uni_bo.model.predict(xs)
-    reg_mu, reg_var = bo.model.predict(xs)
+    # xs = np.linspace(-1, 1, 1001)[:, None]
+    # uni_mu, uni_var = uni_bo.model.predict(xs)
+    # reg_mu, reg_var = bo.model.predict(xs)
 
-    plt.subplot(1, 2, 1)
-    plot_with_uncertainty(xs, uni_mu, np.sqrt(uni_var), color='r', label='Unimodal')
-    plt.plot(Xu, Yu, 'r.', markersize=10)
+    # plt.subplot(1, 2, 1)
+    # plot_with_uncertainty(xs, uni_mu, np.sqrt(uni_var), color='r', label='Unimodal')
+    # plt.plot(Xu, Yu, 'r.', markersize=10)
 
-    plot_with_uncertainty(xs, reg_mu, np.sqrt(reg_var), color='b', label='Regular')
-    ytrue = [l_new0[0][0].do_evaluate(xi) for xi in xs]
-    plt.plot(xs, ytrue, 'g--', linewidth = 2)
+    # plot_with_uncertainty(xs, reg_mu, np.sqrt(reg_var), color='b', label='Regular')
+    # ytrue = [l_new0[0][f_idx].do_evaluate(xi) for xi in xs]
+    # plt.plot(xs, ytrue, 'g--', linewidth = 2)
 
-    plt.plot(X, Y, 'b.')
-    plt.grid(True)
-    plt.legend()
+    # plt.plot(X, Y, 'b.')
+    # plt.grid(True)
+    # plt.legend()
+
+    # plt.ylim([-0.5, 1.5])
 
 
-    plt.subplot(1, 2, 2)
-    plt.plot(Yu, 'r', label = 'Unimodal')
-    plt.plot(Y, 'b', label = 'Regular')
-    plt.legend()
-    plt.grid(True)
-    plt.xlabel('Iterations')
-    plt.show()
+    # plt.subplot(1, 2, 2)
+    # plt.plot(Yu, 'r', label = 'Unimodal')
+    # plt.plot(Y, 'b', label = 'Regular')
+    # plt.ylim([-0.5, 1.5])
+    # plt.legend()
+    # plt.grid(True)
+    # plt.xlabel('Iterations')
+    # plt.show()
 

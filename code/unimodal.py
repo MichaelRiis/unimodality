@@ -16,7 +16,7 @@ reload(ep)
 class UnimodalGP(GPy.core.Model):
 
 
-    def __init__(self, X, Y, Xd, f_kernel_base, g_kernel_base, likelihood, name='UnimodalGP'):
+    def __init__(self, X, Y, Xd, f_kernel_base, g_kernel_base, likelihood, name='UnimodalGP', Xq=None, Yq=None):
 
         super(UnimodalGP, self).__init__(name=name)
 
@@ -72,10 +72,23 @@ class UnimodalGP(GPy.core.Model):
 
         self.Xg, _, self.Xg_output_index = GPy.util.multioutput.build_XY([Xd, Xd], [None, None])
 
+
+        if Xq is not None or Yq is not None:
+            assert( Xq is not None and Yq is not None)
+            assert (len(Xq) == len(Yq))
+
+    
+        self.Xq = Xq
+        self.Yq = Yq
+        # self.Xq = np.row_stack(( (0, 0), (1, 0) )) #np.zeros((0,2))#
+        # self.Yq = np.array([-1, 1])[:, None]
+        # self.Yq = np.zeros((0))
+
+
     def parameters_changed(self):
 
         # Run EP
-        self.f_posterior, self.g_posterior_list, Kf, self._log_lik, self.grad_dict = ep.ep_unimodality(self.Xf, self.Xg, self.X, self.Y, Kf_kernel=self.Kf_kernel.copy(), Kg_kernel_list=self.Kg_kernel_list, sigma2=self.likelihood.variance, t2=self.Xd, verbose=0, nu2=1., tol=1e-10, max_itt=100)
+        self.f_posterior, self.g_posterior_list, Kf, self._log_lik, self.grad_dict = ep.ep_unimodality(self.Xf, self.Xg, self.X, self.Y, Kf_kernel=self.Kf_kernel.copy(), Kg_kernel_list=self.Kg_kernel_list, sigma2=self.likelihood.variance, t2=self.Xd, X3=self.Xq, Y3=self.Yq, verbose=0, nu2=1., tol=1e-10, max_itt=100)
 
         # update gradients for noise variance
         self.likelihood.variance.gradient = np.sum(np.diag(self.grad_dict['dL_dK_f'])[:self.N])
@@ -117,8 +130,13 @@ class UnimodalGP(GPy.core.Model):
         # augment Xnew with kernel index
         Xp = np.column_stack(  (Xnew, np.zeros((len(Xnew), 1))) )
 
+        if self.Xq is not None:
+            Xg_aug = np.row_stack((self.Xg, self.Xq))
+        else:
+            Xg_aug = self.Xg
+
         # predict
-        pred_mean, pred_var = self.g_posterior_list[g_index]._raw_predict(self.Kg_kernel_list[g_index], Xp, self.Xg, full_cov=full_cov)
+        pred_mean, pred_var = self.g_posterior_list[g_index]._raw_predict(self.Kg_kernel_list[g_index], Xp, Xg_aug, full_cov=full_cov)
 
         return pred_mean, pred_var
 

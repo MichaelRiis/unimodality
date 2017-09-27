@@ -36,7 +36,7 @@ def update_posterior(K, eta, theta):
 
     # return mu, Sigma, Sigma_full, L
 
-def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=None, max_itt=50, nu=10., nu2 = 1., alpha=0.9, tol=1e-6, verbose=0, moment_function=None, seed=0):
+def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, X3=None, Y3=None, m=None, max_itt=50, nu=10., nu2 = 1., alpha=0.9, tol=1e-6, verbose=0, moment_function=None, seed=0):
 
     np.random.seed(seed)
     t0 = time.time()
@@ -47,6 +47,11 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
 
     N, D = t.shape
     M = len(t2)
+
+    if X3 is None:
+        Q = 0
+    else:
+        Q = len(X3)
     Df = N + D*M
     Dg = M + M
 
@@ -61,8 +66,13 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     ###################################################################################
     # Contruct kernels
     ###################################################################################
+    if X3 is not None:
+        X2aug = np.row_stack((X2, X3))
+    else:
+        X2aug = X2
+
     Kf = Kf_kernel.K(X1)
-    Kg_list = [kg.K(X2) for kg in Kg_kernel_list]
+    Kg_list = [kg.K(X2aug) for kg in Kg_kernel_list]
 
 
     ###################################################################################
@@ -79,9 +89,9 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
     f_ga_approx.tau[:N] = 1./sigma2
 
     # for each g
-    g_marg_moments_list = [marginalMoments(2*M) for d in range(D)]
-    g_ga_approx_list = [gaussianApproximation(v=np.zeros(2*M), tau=np.zeros(2*M)) for d in range(D)]
-    g_cavity_list = [cavityParams(2*M) for d in range(D)]
+    g_marg_moments_list = [marginalMoments(2*M + Q) for d in range(D)]
+    g_ga_approx_list = [gaussianApproximation(v=np.zeros(2*M + Q), tau=np.zeros(2*M + Q)) for d in range(D)]
+    g_cavity_list = [cavityParams(2*M + Q) for d in range(D)]
 
     # hardcode eta to 1
     eta = 1
@@ -108,14 +118,30 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
         d_list = np.random.choice(range(D), size=D, replace=False)
         for d in d_list:
 
-            if M == 0:
-                break
-
             # get relevant EP parameters for dimension d
             g_posterior = g_post_params_list[d]
             g_ga_approx = g_ga_approx_list[d]
             g_cavity = g_cavity_list[d]
             g_marg_mom = g_marg_moments_list[d]
+
+            # handle q points
+            if Q > 0:
+
+                for j in range(Q):
+                    i = 2*M + j
+
+                    g_cavity._update_i(eta=eta, ga_approx=g_ga_approx, post_params=g_posterior, i=i)
+
+                    try:
+                        g_marg_mom.Z_hat[i], g_marg_mom.mu_hat[i], g_marg_mom.sigma2_hat[i] = match_moments_g(Y3[j], g_cavity.v[i], g_cavity.tau[i], nu)
+                    except AssertionError:
+                        print('Numerical problem q-term i = %d, j = %d for dim = %d in iteration %d. Skipping update' % (i, j, d, itt))
+                        continue
+
+                    g_ga_approx._update_i(eta=eta, delta=alpha, post_params=g_posterior, marg_moments=g_marg_mom, i=i)
+
+            if M == 0:
+                continue
 
             j_list = np.random.choice(range(M), size=M, replace=False) if M > 0 else []
             for j in j_list:
@@ -145,7 +171,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, m=N
         for d in d_list:
 
             if M == 0:
-                break
+                continue
 
             # get relevant EP parameters for dimension d
             g_posterior = g_post_params_list[d]

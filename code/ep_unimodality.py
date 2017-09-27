@@ -51,7 +51,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, X3=
     if X3 is None:
         Q = 0
     else:
-        Q = len(X3)
+        Q = len(X3[0])
     Df = N + D*M
     Dg = M + M
 
@@ -66,13 +66,28 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, X3=
     ###################################################################################
     # Contruct kernels
     ###################################################################################
-    if X3 is not None:
-        X2aug = np.row_stack((X2, X3))
-    else:
-        X2aug = X2
+    # if X3 is not None:
+        # X2aug = np.row_stack((X2, X3))
+    # else:
+        # X2aug = X2
 
     Kf = Kf_kernel.K(X1)
-    Kg_list = [kg.K(X2aug) for kg in Kg_kernel_list]
+
+    Kg_list = []
+
+    if X3 is None:
+        X3 = [None for kg in Kg_kernel_list]
+
+    for X3i, kg in zip(X3, Kg_kernel_list):
+        if X3i is not None:
+            X2aug = np.row_stack((X2, X3i))
+        else:
+            X2aug = X2
+
+
+        Kg_list.append(kg.K(X2aug))
+
+    # Kg_list = [kg.K(X2aug) for kg in Kg_kernel_list]
 
 
     ###################################################################################
@@ -133,7 +148,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, X3=
                     g_cavity._update_i(eta=eta, ga_approx=g_ga_approx, post_params=g_posterior, i=i)
 
                     try:
-                        g_marg_mom.Z_hat[i], g_marg_mom.mu_hat[i], g_marg_mom.sigma2_hat[i] = match_moments_g(Y3[j], g_cavity.v[i], g_cavity.tau[i], nu)
+                        g_marg_mom.Z_hat[i], g_marg_mom.mu_hat[i], g_marg_mom.sigma2_hat[i] = match_moments_g(Y3[d][j], g_cavity.v[i], g_cavity.tau[i], nu)
                     except AssertionError:
                         print('Numerical problem q-term i = %d, j = %d for dim = %d in iteration %d. Skipping update' % (i, j, d, itt))
                         continue

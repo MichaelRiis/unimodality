@@ -131,7 +131,7 @@ class UnimodalGP(GPy.core.Model):
         Xp = np.column_stack(  (Xnew, np.zeros((len(Xnew), 1))) )
 
         if self.Xq is not None:
-            Xg_aug = np.row_stack((self.Xg, self.Xq))
+            Xg_aug = np.row_stack((self.Xg, self.Xq[g_index]))
         else:
             Xg_aug = self.Xg
 

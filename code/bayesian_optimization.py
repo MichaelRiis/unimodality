@@ -150,7 +150,7 @@ class BayesianOptimization(object):
         best = np.inf
         for i in range(num_points):
             x = np.random.rand(1,self.dim)
-            opt = minimize(acq_n, x, method='L-BFGS-B', bounds = tuple((self.bounds[i,0], self.bounds[i,1]) for i in range(self.dim) ), jac=True, tol=1e-50)
+            opt = minimize(acq_n, x, method='L-BFGS-B', bounds = tuple((self.bounds[i,0], self.bounds[i,1]) for i in range(self.dim) ), jac=True, tol=1e-10)
             temp,_ = acq_n(opt.x)
             if temp < best:
                 x_best = opt.x
@@ -198,8 +198,8 @@ class UnimodalBayesianOptimization(BayesianOptimization):
             g_variance, g_lengthscale = 0.1, 0.1
             
             g_kernel_base = GPy.kern.RBF(input_dim = self.dim, lengthscale=g_lengthscale, variance=g_variance)
-            g_kernel_base.variance.set_prior(GPy.priors.HalfT(1,1))
-            g_kernel_base.lengthscale.set_prior(GPy.priors.HalfT(1,1))
+            g_kernel_base.variance.set_prior(GPy.priors.LogGaussian(1., 0.5))
+            g_kernel_base.lengthscale.set_prior(GPy.priors.LogGaussian(-1, 0.1))
 
             lik = GPy.likelihoods.Gaussian(variance=self.noise)
             if self.noise < 0.00001:
@@ -223,11 +223,52 @@ class UnimodalBayesianOptimization(BayesianOptimization):
             if self.g_constraints:
 
                 if self.dim == 1:
-                    Xq = np.column_stack((Xd[[0, -1]], np.zeros((2, 1))))
-                    Yq = np.array([-1, 1])[:, None]
+                    Xq = [np.column_stack((Xd[[0, -1]], np.zeros((2, 1))))]
+                    Yq = [np.array([-1, 1])[:, None]]
                 else:
-                    Xq = None
-                    Yq = None
+
+
+                    Xq = []
+                    Yq = []
+
+                    Q = 5
+
+                    xq = np.linspace(0, 1, Q)
+
+                    # dim 1
+                    E1 = np.column_stack((np.zeros((Q)), xq, np.zeros((Q))))
+                    E2 = np.column_stack((np.ones((Q)), xq, np.zeros((Q))))
+                    E = np.row_stack((E1, E2))
+
+                    W1 = -1*np.ones((len(E1), 1))
+                    W2 = np.ones((len(E1), 1))
+                    W = np.row_stack((W1, W2))
+
+                    Xq.append(E)
+                    Yq.append(W)
+
+
+                    # dim 2
+                    E1 = np.column_stack((xq, np.zeros((Q)), np.zeros((Q))))
+                    E2 = np.column_stack((xq, np.ones((Q)), np.zeros((Q))))
+                    E = np.row_stack((E1, E2))
+
+                    W1 = -1*np.ones((len(E1), 1))
+                    W2 = np.ones((len(E1), 1))
+                    W = np.row_stack((W1, W2))
+
+                    Xq.append(E)
+                    Yq.append(W)
+
+
+
+
+# 
+                    # import ipdb; ipdb.set_trace()
+
+
+                    # Xq = None
+                    # Yq = None
                     
             else:
                 Xq = None
@@ -273,7 +314,7 @@ if __name__ == "__main__":
     # bo.save_metrics(path)
 
     print("BO with unimodal GP")
-    uni_bo = UnimodalBayesianOptimization(func_id=0, func = l_new[0][f_idx], acquisition_function=EI, max_iter=max_itt, noise = noise, g_constraints=False)
+    uni_bo = UnimodalBayesianOptimization(func_id=0, func = l_new[0][f_idx], acquisition_function=EI, max_iter=max_itt, noise = noise, g_constraints=True)
     Xu, Yu = uni_bo.optimize()
 
 

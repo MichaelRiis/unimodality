@@ -6,8 +6,8 @@ base_str = "python run_1d.py"
 function_classes = ['gaussian', 'student_t']
 max_functions = 100
 
-lines_per_job = 20
-time_per_line = 10
+lines_per_job = 10
+time_per_line = 25
 
 # generate run line for each run
 lines = []

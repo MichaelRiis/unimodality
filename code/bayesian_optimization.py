@@ -123,7 +123,7 @@ class BayesianOptimization(object):
     def get_model(self, X, Y, noise=0., gp=None):
         if gp is None:
             ker_const = GPy.kern.Bias(input_dim=self.dim, variance=0.5)
-            # ker_const.variance.constrain_fixed(value=0.5, warning=True, trigger_parent=True)
+            ker_const.variance.constrain_fixed(value=0.5, warning=True, trigger_parent=True)
 
             ker_sexp = GPy.kern.RBF(input_dim=self.dim, variance=0.1, lengthscale=1.0, ARD=True)
             prior = GPy.priors.HalfT(1,1)

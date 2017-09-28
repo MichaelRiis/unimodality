@@ -87,6 +87,57 @@ class Gaussian(object):
     def do_evaluate(self, x):
         x = np.array(x)
         return np.sum( [-self.weights[i]*scipy.stats.multivariate_normal.pdf(x, self.centers[i,:], self.variances[i]) for i in range(self.num_peaks)] )
+
+class Gaussian(object):
+    def __init__(self, dim=1, num_peaks=1, seed=None, safe_limit=0.):
+        if seed is not None:
+            np.random.seed(seed)
+        self.num_peaks = num_peaks
+        self.num_evals = 0
+        self.dim = dim
+        self.weights = np.random.rand(num_peaks)+np.finfo(float).eps
+        self.centers = np.random.rand(num_peaks, dim)*(1.-2.*safe_limit)+safe_limit
+        og = [scipy.linalg.orth(np.random.randn(dim,dim)) for i in range(num_peaks)]
+        self.variances = [np.dot(np.dot(og[i], np.diag(np.random.rand(dim)*0.9+0.1)), og[i].T) / 7. for i in range(num_peaks)]
+        mins = [self.do_evaluate(self.centers[i,:]) for i in range(num_peaks)]
+        ind = np.argmin( [self.do_evaluate(self.centers[i,:]) for i in range(num_peaks)] )
+        self.fmin = mins[ind]
+        self.min_loc = self.centers[ind,:]
+        self.fmax = 0.0
+        self.bounds = lzip([0] * self.dim, [1] * self.dim)
+        
+    def do_evaluate(self, x):
+        x = np.array(x)
+        return np.sum( [-self.weights[i]*scipy.stats.multivariate_normal.pdf(x, self.centers[i,:], self.variances[i]) for i in range(self.num_peaks)] )
+
+
+
+class StudentT(object):
+    def __init__(self, dim=1, num_peaks=1, seed=None, safe_limit=0.):
+
+        assert(dim == 1)
+        assert(num_peaks == 1)
+
+        if seed is not None:
+            np.random.seed(seed)
+
+        self.num_peaks = num_peaks
+        self.num_evals = 0
+        self.dim = dim
+        self.weights = np.random.rand(num_peaks)+np.finfo(float).eps
+        self.centers = np.random.rand(num_peaks, dim)*(1.-2.*safe_limit)+safe_limit
+        og = [scipy.linalg.orth(np.random.randn(dim,dim)) for i in range(num_peaks)]
+        self.variances = [np.dot(np.dot(og[i], np.diag(np.random.rand(dim)*0.9+0.1)), og[i].T) / 7. for i in range(num_peaks)]
+        mins = [self.do_evaluate(self.centers[i,:]) for i in range(num_peaks)]
+        ind = np.argmin( [self.do_evaluate(self.centers[i,:]) for i in range(num_peaks)] )
+        self.fmin = mins[ind]
+        self.min_loc = self.centers[ind,:]
+        self.fmax = 0.0
+        self.bounds = lzip([0] * self.dim, [1] * self.dim)
+        
+    def do_evaluate(self, x):
+        x = np.array(x)
+        return np.sum( [-self.weights[i]*scipy.stats.t.pdf(x, df = 1, loc=self.centers[i,:], scale=np.sqrt(self.variances[i])) for i in range(self.num_peaks)] )
         
 def function_of_dimension(funcs, dim):
     ret = []
@@ -102,8 +153,16 @@ def get_gaussian_functions(num, max_dim, num_peaks):
     num_per_dim = int(num/max_dim)
     return [get_gaussian_functions_of_dim(num_per_dim, i+1, num_peaks) for i in range(max_dim)]
 
+def get_student_t_functions(num, max_dim, num_peaks):
+    func_list = []
+    num_per_dim = int(num/max_dim)
+    return [get_student_t_functions_of_dim(num_per_dim, i+1, num_peaks) for i in range(max_dim)]
+
 def get_gaussian_functions_of_dim(num, dim=1, num_peaks=1,):
     return [Gaussian(dim = dim, num_peaks=num_peaks, seed=i) for i in range(num)]
+
+def get_student_t_functions_of_dim(num, dim=1, num_peaks=1,):
+    return [StudentT(dim = dim, num_peaks=num_peaks, seed=i) for i in range(num)]
 
 def noisify_functions(func_list, noise_level):
     if isinstance(func_list, list):

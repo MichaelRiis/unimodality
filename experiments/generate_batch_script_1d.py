@@ -4,7 +4,7 @@ output_filebase = "run_1d_batch"
 
 base_str = "python run_1d.py"
 function_classes = ['gaussian', 'student_t']
-max_functions = 20
+max_functions = 100
 
 lines_per_job = 20
 time_per_line = 10
@@ -36,6 +36,7 @@ for idx_job in range(num_jobs):
 	print(100*'-')
 
 	f  = open(output_file, 'w') 
+
 
 
 	f.write('#!/bin/bash\n')

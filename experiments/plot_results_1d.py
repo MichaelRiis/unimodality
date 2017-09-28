@@ -120,6 +120,7 @@ for idx_class, function_class in enumerate(function_classes):
 		plt.grid(True)
 		plt.xlabel('Number of iterations')
 		plt.ylabel(metric_name)
+		plt.title(function_class)
 plt.show()
 
 

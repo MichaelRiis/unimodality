@@ -75,7 +75,7 @@ metrics = OrderedDict([ ('Function value', function_value),
 #############################################################################################################
 parser = argparse.ArgumentParser()
 parser.add_argument('--directory_base', help='results directory', default = 'results')
-parser.add_argument('--dim', type=int, help='dimension', default=2)
+parser.add_argument('--dim', type=int, help='dimension', default=1)
 
 # extract
 args = parser.parse_args()
@@ -85,8 +85,16 @@ dim = args.dim
 
 
 models = ['regular', 'unimodal', 'unimodal2']
-function_classes = ['gaussian']#, 'student_t']
+function_classes = ['gaussian', 'student_t']
 
+
+# check that all function classes exists for specificed dim
+function_classes = [function_class for function_class in function_classes if os.path.exists('{}_{}_{}d'.format(directory_base, function_class, dim))]
+
+print('Found data for function_classes:')
+for function_class in function_classes:
+	print('\t%s' % function_class)
+print('\n')
 
 
 #############################################################################################################
@@ -120,7 +128,7 @@ for idx_class, function_class in enumerate(function_classes):
 		plt.grid(True)
 		plt.xlabel('Number of iterations')
 		plt.ylabel(metric_name)
-		plt.title(function_class)
+		plt.title(function_class + ' (%dD)' % dim)
 plt.show()
 
 

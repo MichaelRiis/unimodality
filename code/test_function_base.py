@@ -7,6 +7,26 @@ from scipy.stats import multivariate_normal
 import itertools
 
 from scipy.special import gammaln
+from scipy.signal import tukey
+
+def tukey_function(x):
+
+    if (-1/3 - 2*x < 0) and (-1/3 + 2*x <0):
+        return 1.
+
+    elif (x > -1/2 and -1/3 - 2*x > 0):
+        return 0.5*(1 + np.cos(3*np.pi*(1/6 + x)))
+
+    elif (-1/3 + 2*x > 0 and x <= 0.5):
+        return 0.5*(1 + np.cos(3*np.pi*(-1/6 + x)))
+
+    else:
+        return 0
+
+
+
+
+
 
 def multivariate_student_t(X, mu, Sigma, df):    
     #multivariate student T distribution
@@ -112,8 +132,11 @@ class Gaussian(object):
         x = np.array(x)
         return np.sum( [-self.weights[i]*scipy.stats.multivariate_normal.pdf(x, self.centers[i,:], self.variances[i]) for i in range(self.num_peaks)] )
 
-class Gaussian(object):
+class Tukey(object):
     def __init__(self, dim=1, num_peaks=1, seed=None, safe_limit=0.):
+
+        assert(dim==1)
+
         if seed is not None:
             np.random.seed(seed)
         self.num_peaks = num_peaks
@@ -132,8 +155,7 @@ class Gaussian(object):
         
     def do_evaluate(self, x):
         x = np.array(x)
-        return np.sum( [-self.weights[i]*scipy.stats.multivariate_normal.pdf(x, self.centers[i,:], self.variances[i]) for i in range(self.num_peaks)] )
-
+        return np.sum( [-self.weights[i]*tukey_function(np.atleast_2d( (x-self.centers[i,:])/np.sqrt(self.variances[i]))) for i in range(self.num_peaks)] )
 
 
 class StudentT(object):
@@ -182,11 +204,21 @@ def get_student_t_functions(num, max_dim, num_peaks):
     num_per_dim = int(num/max_dim)
     return [get_student_t_functions_of_dim(num_per_dim, i+1, num_peaks) for i in range(max_dim)]
 
+
+def get_tukey_functions(num, max_dim, num_peaks):
+    func_list = []
+    num_per_dim = int(num/max_dim)
+    return [get_tukey_functions_of_dim(num_per_dim, i+1, num_peaks) for i in range(max_dim)]
+
 def get_gaussian_functions_of_dim(num, dim=1, num_peaks=1,):
     return [Gaussian(dim = dim, num_peaks=num_peaks, seed=i) for i in range(num)]
 
 def get_student_t_functions_of_dim(num, dim=1, num_peaks=1,):
     return [StudentT(dim = dim, num_peaks=num_peaks, seed=i) for i in range(num)]
+
+
+def get_tukey_functions_of_dim(num, dim=1, num_peaks=1,):
+    return [Tukey(dim = dim, num_peaks=num_peaks, seed=i) for i in range(num)]
 
 def noisify_functions(func_list, noise_level):
     if isinstance(func_list, list):

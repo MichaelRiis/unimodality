@@ -85,7 +85,7 @@ dim = args.dim
 
 
 models = ['regular', 'unimodal', 'unimodal2']
-function_classes = ['gaussian', 'student_t']
+function_classes = ['gaussian', 'student_t', 'tukey']
 
 
 # check that all function classes exists for specificed dim

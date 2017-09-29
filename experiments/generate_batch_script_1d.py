@@ -3,7 +3,8 @@ import numpy as np
 output_filebase = "run_1d_batch"
 
 base_str = "python run_1d.py"
-function_classes = ['gaussian', 'student_t']
+# function_classes = ['gaussian', 'student_t', 'tukey']
+function_classes = ['tukey']
 max_functions = 100
 
 lines_per_job = 10

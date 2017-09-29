@@ -74,6 +74,8 @@ if function_class == "gaussian":
 	functions0 = test_function_base.get_gaussian_functions(num_functions, dim, num_peaks)
 elif function_class == "student_t":
 	functions0 = test_function_base.get_student_t_functions(num_functions, dim, num_peaks)
+elif function_class == "tukey":
+	functions0 = test_function_base.get_tukey_functions(num_functions, dim, num_peaks)
 else:
 
 	print('Function class: %s unknown!')

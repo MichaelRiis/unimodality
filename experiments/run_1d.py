@@ -143,6 +143,6 @@ if not os.path.exists(target_directory):
 	print('Created directory:\t%s' % target_directory)
 
 # save to file
-outputfile = join(target_directory, "gaussian_1d_idx%d_seed%d" % (function_idx, seed))
+outputfile = join(target_directory, "%s_%dd_idx%d_seed%d" % (function_class, dim, function_idx, seed))
 np.savez(outputfile, **save_dict)
 print('Saved to file: %s.npz' % outputfile)

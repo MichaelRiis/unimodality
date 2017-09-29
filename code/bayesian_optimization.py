@@ -209,11 +209,12 @@ class UnimodalBayesianOptimization(BayesianOptimization):
                 lik.variance.set_prior(prior)
 
 
-            M = 10
-
+            
             if self.dim == 1:
+                M = 10
                 Xd = np.linspace(0, 1, M)[:, None]
             else:
+                M = 7
                 x1 = np.linspace(0, 1, M)
                 x2 = np.linspace(0, 1, M)
                 X1, X2 = np.meshgrid(x1, x2)

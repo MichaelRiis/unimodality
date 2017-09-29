@@ -44,9 +44,6 @@ settings_dict = {'target_directory': target_directory,
 target_directory += "_%s_%dd" % (function_class, dim)
 
 
-assert(function_class=='gaussian')
-
-
 #############################################################################################################
 # Print experiment settings
 #############################################################################################################
@@ -75,10 +72,7 @@ if function_class == "gaussian":
 	functions0 = test_function_base.get_gaussian_functions(num_functions, dim, num_peaks)
 elif function_class == "student_t":
 	functions0 = test_function_base.get_student_t_functions(num_functions, dim, num_peaks)
-else:
 
-	print('Function class: %s unknown!')
-	raise AssertionError
 functions = test_function_base.normalize_functions(functions0)	
 noisy_functions = test_function_base.noisify_functions(functions, noise_std)      
 
@@ -124,8 +118,6 @@ for name, model_constructor in models.items():
 	# done
 	t1 = time.time()
 	print('Finished running %s in %4.3fs' % (name, t1-t0))
-
-
 
 
 

@@ -6,6 +6,30 @@ import scipy.linalg
 from scipy.stats import multivariate_normal
 import itertools
 
+from scipy.special import gammaln
+
+def multivariate_student_t(X, mu, Sigma, df):    
+    #multivariate student T distribution
+
+    [n,d] = X.shape
+    Xm = X-mu
+    V = df * Sigma
+    V_inv = np.linalg.inv(V)
+
+    L = np.linalg.cholesky(V)
+
+    # log det of pi*V
+    logdet = 2*np.sum(np.log(np.diag(L))) + d*np.log(np.pi)
+
+    b = np.linalg.solve(L, Xm.T)
+
+    logz = gammaln(df/2.0 + d/2.0) - gammaln(df/2.0) - 0.5*logdet
+    logp = -0.5*(df+d)*np.log(1+ np.sum(b**2))
+
+    logp = logp + logz            
+
+    return np.exp(logp)
+
 
 def lzip(*args):
     """
@@ -115,7 +139,6 @@ class Gaussian(object):
 class StudentT(object):
     def __init__(self, dim=1, num_peaks=1, seed=None, safe_limit=0.):
 
-        assert(dim == 1)
         assert(num_peaks == 1)
 
         if seed is not None:
@@ -137,7 +160,8 @@ class StudentT(object):
         
     def do_evaluate(self, x):
         x = np.array(x)
-        return np.sum( [-self.weights[i]*scipy.stats.t.pdf(x, df = 1, loc=self.centers[i,:], scale=np.sqrt(self.variances[i])) for i in range(self.num_peaks)] )
+        # return np.sum( [-self.weights[i]*scipy.stats.t.pdf(x, df = 1, loc=self.centers[i,:], scale=np.sqrt(self.variances[i])) for i in range(self.num_peaks)] )
+        return np.sum( [-self.weights[i]*multivariate_student_t(np.atleast_2d(x), self.centers[i,:], self.variances[i], df=1) for i in range(self.num_peaks)] )
         
 def function_of_dimension(funcs, dim):
     ret = []

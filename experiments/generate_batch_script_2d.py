@@ -3,7 +3,8 @@ import numpy as np
 output_filebase = "run_2d_batch"
 
 base_str = "python run_2d.py"
-function_classes = ['gaussian']
+# function_classes = ['gaussian', 'student_t']
+function_classes = ['student_t']
 max_functions = 100
 
 lines_per_job = 10

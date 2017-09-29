@@ -5,7 +5,7 @@ from scipy.stats import norm
 from scipy.misc import logsumexp
 
 import GPy
-from GPy.inference.latent_function_inference.expectation_propagation import posteriorParams, marginalMoments, gaussianApproximation, cavityParams
+from GPy.inference.latent_function_inference.expectation_propagation import posteriorParams, marginalMoments, gaussianApproximation
 from GPy.inference.latent_function_inference.posterior import PosteriorEP as Posterior
 
 from GPy.util.linalg import  dtrtrs, dpotrs, tdot, symmetrify, jitchol
@@ -21,9 +21,18 @@ logphi = lambda x: norm.logcdf(x)
 
 log_2_pi = np.log(2*np.pi)
 
-def update_posterior(K, eta, theta):
+
+class cavityParams(object):
+    def __init__(self, num_data):
+        self.tau = np.zeros(num_data,dtype=np.float64)
+        self.v = np.zeros(num_data,dtype=np.float64)
+    def _update_i(self, eta, ga_approx, post_params, i):
+        self.tau[i] = 1./post_params.Sigma_diag[i] - eta*ga_approx.tau[i]
+        self.v[i] = post_params.mu[i]/post_params.Sigma_diag[i] - eta*ga_approx.v[i]
+
+def update_posterior(K, eta, theta, jitter=1e-10):
     D = K.shape[0]
-    sqrt_theta = np.sqrt(theta)
+    sqrt_theta = np.sqrt(theta + jitter)
     G = sqrt_theta[:, None]*K
     B = np.identity(D) + G*sqrt_theta
     L = jitchol(B)
@@ -149,7 +158,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, X3=
 
                     try:
                         g_marg_mom.Z_hat[i], g_marg_mom.mu_hat[i], g_marg_mom.sigma2_hat[i] = match_moments_g(Y3[d][j], g_cavity.v[i], g_cavity.tau[i], nu)
-                    except AssertionError:
+                    except AssertionError as e:
                         print('Numerical problem q-term i = %d, j = %d for dim = %d in iteration %d. Skipping update' % (i, j, d, itt))
                         continue
 
@@ -170,7 +179,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, X3=
                 # match moments
                 try:
                     g_marg_mom.Z_hat[i], g_marg_mom.mu_hat[i], g_marg_mom.sigma2_hat[i] = match_moments_g(m[d,j], g_cavity.v[i], g_cavity.tau[i], nu)
-                except AssertionError:
+                except AssertionError as e:
                     print('Numerical problem g-term i = %d, j = %d for dim = %d in iteration %d. Skipping update' % (i, j, d, itt))
                     continue
 
@@ -206,7 +215,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, X3=
                 # match moments
                 try:
                     mom_f, mom_g = match_moments_fg(f_cavity.v[i], f_cavity.tau[i], g_cavity.v[j], g_cavity.tau[j], nu2, moment_function)
-                except AssertionError:
+                except AssertionError as e:
                     print('Numerical problem fg-term i = %d, j = %d for dim = %d in iteration %d. Skipping update' % (i, j, d, itt))
                     continue
 

@@ -36,8 +36,11 @@ class ProbitMoments(object):
         z = (mu - m)/(v*np.sqrt(1 + sigma2/v**2))
         nz = npdf(z, 0, 1)
 
+        if np.isnan(z):
+            raise AssertionError()
+
         logZ = logCdfNormal(z)
-        Z = np.exp(logZ)
+        Z = max(np.exp(logZ), 1e-20)
 
         phi_div_Phi = derivLogCdfNormal(z)
 

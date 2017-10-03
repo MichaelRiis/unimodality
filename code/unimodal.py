@@ -87,6 +87,25 @@ class UnimodalGP(GPy.core.Model):
 
     def parameters_changed(self):
 
+        # check for extremely small lengthscales
+        # TODO: find cause or find better solution
+        g_lengthscales = np.stack([kg_kernel['.*lengthscale'] for kg_kernel in self.Kg_kernel_list])
+        if np.any(self.Kf_kernel['.*lengthscale'] < 1e-6) or np.any(g_lengthscales < 1e-6):
+            print('Warning: at least one lengthscale is extremely small. EP cannot run, so we will just return logZ = -np.inf')
+            self._log_lik = -np.Inf
+
+            print(100*'-')
+            print('- Kernel values')
+            print(100*'-')
+            print(self.Kf_kernel)
+            print('\n')
+            for kg_kernel in self.Kg_kernel_list:
+                print(kg_kernel)
+
+            print('\n\n')
+
+            return
+
         # Run EP
         self.f_posterior, self.g_posterior_list, Kf, self._log_lik, self.grad_dict = ep.ep_unimodality(self.Xf, self.Xg, self.X, self.Y, Kf_kernel=self.Kf_kernel.copy(), Kg_kernel_list=self.Kg_kernel_list, sigma2=self.likelihood.variance, t2=self.Xd, X3=self.Xq, Y3=self.Yq, verbose=0, nu2=1., tol=1e-10, max_itt=100)
 
@@ -103,6 +122,8 @@ class UnimodalGP(GPy.core.Model):
                 break
 
             self.Kg_kernel_list[d].update_gradients_full(self.grad_dict['dL_dK_g%d' % d], self.Xg)
+
+
 
 
     def log_likelihood(self):

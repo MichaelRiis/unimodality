@@ -5,7 +5,7 @@ from scipy.stats import norm
 from scipy.misc import logsumexp
 
 import GPy
-from GPy.inference.latent_function_inference.expectation_propagation import posteriorParams, marginalMoments, gaussianApproximation
+from GPy.inference.latent_function_inference.expectation_propagation import posteriorParams, gaussianApproximation
 from GPy.inference.latent_function_inference.posterior import PosteriorEP as Posterior
 
 from GPy.util.linalg import  dtrtrs, dpotrs, tdot, symmetrify, jitchol
@@ -29,6 +29,12 @@ class cavityParams(object):
     def _update_i(self, eta, ga_approx, post_params, i):
         self.tau[i] = 1./post_params.Sigma_diag[i] - eta*ga_approx.tau[i]
         self.v[i] = post_params.mu[i]/post_params.Sigma_diag[i] - eta*ga_approx.v[i]
+
+class marginalMoments(object):
+    def __init__(self, num_data):
+        self.logZ_hat = np.empty(num_data,dtype=np.float64)
+        self.mu_hat = np.empty(num_data,dtype=np.float64)
+        self.sigma2_hat = np.empty(num_data,dtype=np.float64)
 
 def update_posterior(K, eta, theta, jitter=1e-10):
     D = K.shape[0]
@@ -75,28 +81,21 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, X3=
     ###################################################################################
     # Contruct kernels
     ###################################################################################
-    # if X3 is not None:
-        # X2aug = np.row_stack((X2, X3))
-    # else:
-        # X2aug = X2
-
     Kf = Kf_kernel.K(X1)
 
-    Kg_list = []
-
+    # Any q-points provided?
     if X3 is None:
         X3 = [None for kg in Kg_kernel_list]
 
+    # build kernel for each g
+    Kg_list = []
     for X3i, kg in zip(X3, Kg_kernel_list):
         if X3i is not None:
             X2aug = np.row_stack((X2, X3i))
         else:
             X2aug = X2
 
-
         Kg_list.append(kg.K(X2aug))
-
-    # Kg_list = [kg.K(X2aug) for kg in Kg_kernel_list]
 
 
     ###################################################################################
@@ -157,7 +156,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, X3=
                     g_cavity._update_i(eta=eta, ga_approx=g_ga_approx, post_params=g_posterior, i=i)
 
                     try:
-                        g_marg_mom.Z_hat[i], g_marg_mom.mu_hat[i], g_marg_mom.sigma2_hat[i] = match_moments_g(Y3[d][j], g_cavity.v[i], g_cavity.tau[i], nu)
+                        g_marg_mom.logZ_hat[i], g_marg_mom.mu_hat[i], g_marg_mom.sigma2_hat[i] = match_moments_g(Y3[d][j], g_cavity.v[i], g_cavity.tau[i], nu)
                     except AssertionError as e:
                         print('Numerical problem q-term i = %d, j = %d for dim = %d in iteration %d. Skipping update' % (i, j, d, itt))
                         continue
@@ -178,7 +177,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, X3=
 
                 # match moments
                 try:
-                    g_marg_mom.Z_hat[i], g_marg_mom.mu_hat[i], g_marg_mom.sigma2_hat[i] = match_moments_g(m[d,j], g_cavity.v[i], g_cavity.tau[i], nu)
+                    g_marg_mom.logZ_hat[i], g_marg_mom.mu_hat[i], g_marg_mom.sigma2_hat[i] = match_moments_g(m[d,j], g_cavity.v[i], g_cavity.tau[i], nu)
                 except AssertionError as e:
                     print('Numerical problem g-term i = %d, j = %d for dim = %d in iteration %d. Skipping update' % (i, j, d, itt))
                     continue
@@ -220,8 +219,8 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, X3=
                     continue
 
                 # update marginal moments
-                f_marg_moments.Z_hat[i], f_marg_moments.mu_hat[i], f_marg_moments.sigma2_hat[i] = mom_f
-                g_marg_mom.Z_hat[j], g_marg_mom.mu_hat[j], g_marg_mom.sigma2_hat[j] = mom_g
+                f_marg_moments.logZ_hat[i], f_marg_moments.mu_hat[i], f_marg_moments.sigma2_hat[i] = mom_f
+                g_marg_mom.logZ_hat[j], g_marg_mom.mu_hat[j], g_marg_mom.sigma2_hat[j] = mom_g
 
                 # update sites
                 f_ga_approx._update_i(eta=eta, delta=alpha, post_params=f_post_params, marg_moments=f_marg_moments, i=i)
@@ -247,7 +246,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, X3=
     # compute normalization constant for likelihoods
     for i in range(N):
         f_cavity._update_i(eta=eta, ga_approx=f_ga_approx, post_params=f_post_params, i=i)
-        f_marg_moments.Z_hat[i] = npdf(y[i, 0], f_cavity.v[i]/f_cavity.tau[i], 1./f_cavity.tau[i] + sigma2)
+        f_marg_moments.logZ_hat[i] = log_npdf(y[i, 0], f_cavity.v[i]/f_cavity.tau[i], 1./f_cavity.tau[i] + sigma2)
 
 
     # marginal likelihood and gradient contribution from f
@@ -341,19 +340,19 @@ def match_moments_fg(eta_cav_fp, theta_cav_fp, eta_cav_g, theta_cav_g, nu2, mome
     m_cav_g, v_cav_g = eta_cav_g/theta_cav_g, 1./theta_cav_g
 
     # compute moments
-    Z, site_fp_m, site_fp_m2, site_g_m, site_g_m2 = moment_function(m_cav_fp, v_cav_fp, m_cav_g, v_cav_g, nu2=nu2)
+    logZ, site_fp_m, site_fp_m2, site_g_m, site_g_m2 = moment_function(m_cav_fp, v_cav_fp, m_cav_g, v_cav_g, nu2=nu2)
 
     # variances
     site_fp_v = site_fp_m2 - site_fp_m**2
     site_g_v = site_g_m2 - site_g_m**2
 
-    if np.any(np.isnan([Z, site_fp_m, site_fp_v, site_g_m, site_g_v])):
+    if np.any(np.isnan([logZ, site_fp_m, site_fp_v, site_g_m, site_g_v])):
         raise AssertionError()
 
-    return (Z, site_fp_m, site_fp_v), (1, site_g_m, site_g_v)
+    return (logZ, site_fp_m, site_fp_v), (0, site_g_m, site_g_v)
 
 def _log_Z_tilde(marg_moments, ga_approx, cav_params):
-    return np.sum((np.log(marg_moments.Z_hat) + 0.5*np.log(2*np.pi) + 0.5*np.log(1+ga_approx.tau/cav_params.tau) - 0.5 * ((ga_approx.v)**2 * 1./(cav_params.tau + ga_approx.tau))
+    return np.sum((marg_moments.logZ_hat + 0.5*np.log(2*np.pi) + 0.5*np.log(1+ga_approx.tau/cav_params.tau) - 0.5 * ((ga_approx.v)**2 * 1./(cav_params.tau + ga_approx.tau))
             + 0.5*(cav_params.v * ( ( (ga_approx.tau/cav_params.tau) * cav_params.v - 2.0 * ga_approx.v ) * 1./(cav_params.tau + ga_approx.tau)))))
 
 

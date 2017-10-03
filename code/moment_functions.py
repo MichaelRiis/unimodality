@@ -51,7 +51,7 @@ def compute_moments_softinformation(mf, vf, mg, vg, n_std=6, nu2 = 1.):
     Eg = quad(lambda g: g*tilted_marginalized_f(g)[0], g_lower, g_upper)[0]/Z
     Eg2 = quad(lambda g: g**2*tilted_marginalized_f(g)[0], g_lower, g_upper)[0]/Z
     
-    return Z, Ef, Ef2, Eg, Eg2
+    return np.log(Z), Ef, Ef2, Eg, Eg2
     
 
 
@@ -80,11 +80,13 @@ def compute_moments_strict(mf, vf, mg, vg, nu2 = 1.):
     z_f = (mf)/(v*np.sqrt(1 + vf/v**2))
 
     if np.isnan(z_f):
+        import ipdb; ipdb.set_trace()
         raise AssertionError()
             
     logZ_f = logCdfNormal(z_f)
     logZ_f1m = logCdfNormal(-z_f)
-    Z_fp = max(np.exp(logZ_f), 1e-20)
+    Z_fp = max(np.exp(logZ_f), 1e-12)
+    Z_fp = min(Z_fp, 1-1e-12)
 
     phi_div_Phi_f = derivLogCdfNormal(z_f)
     mean_f = mf + vf/(v*np.sqrt(1 + vf/v**2))*phi_div_Phi_f #mu + sigma2*nz/(Z*v*np.sqrt(1 + sigma2/v**2))
@@ -100,11 +102,13 @@ def compute_moments_strict(mf, vf, mg, vg, nu2 = 1.):
     z_g = mg/(v*np.sqrt(1 + vg/v**2))
 
     if np.isnan(z_g):
+        import ipdb; ipdb.set_trace()
         raise AssertionError()
 
     logZ_g = logCdfNormal(z_g)
     logZ_g1m = logCdfNormal(-z_g)
-    Z_g = max(np.exp(logZ_g), 1e-20)
+    Z_g = max(np.exp(logZ_g), 1e-12)
+    Z_g = min(Z_g, 1-1e-12)
 
     phi_div_Phi_g = derivLogCdfNormal(z_g)
     mean_g = mg + vg/(v*np.sqrt(1 + vg/v**2))*phi_div_Phi_g #mu + sigma2*nz/(Z*v*np.sqrt(1 + sigma2/v**2))
@@ -119,7 +123,7 @@ def compute_moments_strict(mf, vf, mg, vg, nu2 = 1.):
     log_a2 = logZ_f + logZ_g
     logZ = logsumexp((log_a1, log_a2))
 
-    Z = max(np.exp(logZ), 1e-20)
+    Z = max(np.exp(logZ), 1e-12)
 
     # momements
     reciprocal_pa = ((1-Z_fp) + Z_fp*Z_g/(1-Z_g))
@@ -132,5 +136,5 @@ def compute_moments_strict(mf, vf, mg, vg, nu2 = 1.):
     site_g_m2 = mean2_g + (mg**2 + vg - mean2_g)/reciprocal_pb
 
 
-    return Z, site_fp_m, site_fp_m2, site_g_m, site_g_m2
+    return logZ, site_fp_m, site_fp_m2, site_g_m, site_g_m2
 

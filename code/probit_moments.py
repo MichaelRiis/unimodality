@@ -52,7 +52,7 @@ class ProbitMoments(object):
             mean2 = Z*mean2 
 
         if return_normalizer:
-            return Z, mean, mean2
+            return logZ, mean, mean2
         else:
             return mean, mean2
 

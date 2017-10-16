@@ -10,8 +10,8 @@ base_str = "python run_1d.py"
 
 function_classes = test_function_base.test_function_dict.keys()
 
-max_functions = 20
-lines_per_job = 10
+max_functions = 100
+lines_per_job = 30
 time_per_line = 25
 
 # generate run line for each run

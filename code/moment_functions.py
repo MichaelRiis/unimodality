@@ -80,7 +80,6 @@ def compute_moments_strict(mf, vf, mg, vg, nu2 = 1.):
     z_f = (mf)/(v*np.sqrt(1 + vf/v**2))
 
     if np.isnan(z_f):
-        import ipdb; ipdb.set_trace()
         raise AssertionError()
             
     logZ_f = logCdfNormal(z_f)

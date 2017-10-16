@@ -1,12 +1,16 @@
 import numpy as np
+import sys
+
+sys.path.append('../code/')
+import test_function_base
 
 output_filebase = "run_1d_batch"
 
 base_str = "python run_1d.py"
-# function_classes = ['gaussian', 'student_t', 'tukey']
-function_classes = ['tukey']
-max_functions = 100
 
+function_classes = test_function_base.test_function_dict.keys()
+
+max_functions = 20
 lines_per_job = 10
 time_per_line = 25
 

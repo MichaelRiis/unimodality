@@ -12,6 +12,8 @@ from os.path import isfile, join
 
 sys.path.append('../code/')
 from util import plot_with_uncertainty
+import test_function_base
+
 
 
 #############################################################################################################
@@ -66,8 +68,8 @@ def best_value(X, Y):
 	return X, np.minimum.accumulate(np.stack(Y), axis=1)
 
 
-metrics = OrderedDict([ ('Function value', function_value),
-                        ('Best value', best_value)])
+metrics = OrderedDict([ ('Function value', function_value) ]) #, ('Best value', best_value)
+metric_name = 'Function value'
 
 
 #############################################################################################################
@@ -85,7 +87,7 @@ dim = args.dim
 
 
 models = ['regular', 'unimodal', 'unimodal2']
-function_classes = ['gaussian', 'student_t', 'tukey']
+function_classes = test_function_base.test_function_dict.keys()
 
 
 # check that all function classes exists for specificed dim
@@ -110,27 +112,28 @@ for idx_class, function_class in enumerate(function_classes):
 	directory = '{}_{}_{}d'.format(directory_base, function_class, dim)
 	results_X, results_Y = read_from_directory(directory)
 
-	# for each metric	
-	for idx_metric, metric_name in enumerate(metrics):
-		plt.subplot2grid((len(function_classes), len(metrics)), (idx_class, idx_metric))
 
-		metric_fun = metrics[metric_name]
-		
-		for name, color in zip(models, colors):
+	plt.subplot(2, int(np.ceil(len(function_classes)/2)), 1 + idx_class)
 
-			X, Y = metric_fun(results_X[name], results_Y[name])
+	print( int(np.ceil(len(function_classes))/2), 1 + idx_class)
 
-			Y_mean, Y_var = np.mean(Y, axis=0), np.var(Y, axis=0)/len(X)
+	metric_fun = metrics[metric_name]
+	
+	for name, color in zip(models, colors):
 
-			plot_with_uncertainty(np.arange(1, len(Y_mean) + 1), Y_mean, yvar=Y_var, color=color, label=name)
+		X, Y = metric_fun(results_X[name], results_Y[name])
 
-		plt.legend()
-		plt.grid(True)
+		Y_mean, Y_var = np.mean(Y, axis=0), np.var(Y, axis=0)/len(X)
 
-		if idx_class == len(function_classes)-1:
-			plt.xlabel('Number of iterations')
-		plt.ylabel(metric_name)
-		plt.title(function_class + ' (%dD)' % dim)
+		plot_with_uncertainty(np.arange(1, len(Y_mean) + 1), Y_mean, yvar=Y_var, color=color, label=name)
+
+	plt.legend()
+	plt.grid(True)
+
+	if idx_class == len(function_classes)-1:
+		plt.xlabel('Number of iterations')
+	plt.ylabel(metric_name)
+	plt.title(function_class + ' (%dD)' % dim)
 plt.show()
 
 

@@ -70,16 +70,17 @@ num_peaks = 1
 # set seed
 np.random.seed(seed)
 
-if function_class == "gaussian":
-	functions0 = test_function_base.get_gaussian_functions(num_functions, dim, num_peaks)
-elif function_class == "student_t":
-	functions0 = test_function_base.get_student_t_functions(num_functions, dim, num_peaks)
-elif function_class == "tukey":
-	functions0 = test_function_base.get_tukey_functions(num_functions, dim, num_peaks)
-else:
+# check for valid function class
+if not function_class in test_function_base.test_function_dict:
+	print('Function class "%s" not found' % function_class)
+	raise ValueError('Function class "%s" not found' % function_class)
 
-	print('Function class: %s unknown!')
-	raise AssertionError
+
+# get test functions
+factory_function = test_function_base.test_function_dict[function_class]
+functions0 = factory_function(num_functions, dim, num_peaks)
+
+# normalize and add noise
 functions = test_function_base.normalize_functions(functions0)	
 noisy_functions = test_function_base.noisify_functions(functions, noise_std)      
 

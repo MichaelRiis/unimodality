@@ -7,55 +7,14 @@ from scipy.stats import multivariate_normal
 import itertools
 
 from scipy.special import gammaln
-from scipy.signal import tukey
-
-def tukey_function(x):
-
-    if (-1/3 - 2*x < 0) and (-1/3 + 2*x <0):
-        return 1.
-
-    elif (x > -1/2 and -1/3 - 2*x > 0):
-        return 0.5*(1 + np.cos(3*np.pi*(1/6 + x)))
-
-    elif (-1/3 + 2*x > 0 and x <= 0.5):
-        return 0.5*(1 + np.cos(3*np.pi*(-1/6 + x)))
-
-    else:
-        return 0
+from collections import OrderedDict
 
 
 
 
-
-
-def multivariate_student_t(X, mu, Sigma, df):    
-    #multivariate student T distribution
-
-    [n,d] = X.shape
-    Xm = X-mu
-    V = df * Sigma
-    V_inv = np.linalg.inv(V)
-
-    L = np.linalg.cholesky(V)
-
-    # log det of pi*V
-    logdet = 2*np.sum(np.log(np.diag(L))) + d*np.log(np.pi)
-
-    b = np.linalg.solve(L, Xm.T)
-
-    logz = gammaln(df/2.0 + d/2.0) - gammaln(df/2.0) - 0.5*logdet
-    logp = -0.5*(df+d)*np.log(1+ np.sum(b**2))
-
-    logp = logp + logz            
-
-    return np.exp(logp)
-
-
-def lzip(*args):
-    """
-    Zip, but returns zipped result as a list.
-    """
-    return list(zip(*args))
+#######################################################################################################
+# Auxilary class
+#######################################################################################################
 
 class Noisifier(object):
     """
@@ -109,14 +68,40 @@ class Normalizer(object):
         
     def do_evaluate(self, x):
         return (self.func.do_evaluate( (x*self.lengths + self.us_bounds[:,0]) ) - self.us_fmin)/self.deviation
-        
+       
+
+
+
+def tukey_function(x):
+    """ Return 1-D tukey function """
+    if (-1/3 - 2*x < 0) and (-1/3 + 2*x <0):
+        return 1.
+
+    elif (x > -1/2 and -1/3 - 2*x > 0):
+        return 0.5*(1 + np.cos(3*np.pi*(1/6 + x)))
+
+    elif (-1/3 + 2*x > 0 and x <= 0.5):
+        return 0.5*(1 + np.cos(3*np.pi*(-1/6 + x)))
+
+    else:
+        return 0
+
+
+
+
+
+
+
+#######################################################################################################
+# Gaussian functions
+#######################################################################################################
 class Gaussian(object):
-    def __init__(self, dim=1, num_peaks=1, seed=None, safe_limit=0.):
-        if seed is not None:
-            np.random.seed(seed)
+    def __init__(self, dim=1, num_peaks=1, seed=0, safe_limit=0., log=False):
+        np.random.seed(seed)
         self.num_peaks = num_peaks
         self.num_evals = 0
         self.dim = dim
+        self.log = log
         self.weights = np.random.rand(num_peaks)+np.finfo(float).eps
         self.centers = np.random.rand(num_peaks, dim)*(1.-2.*safe_limit)+safe_limit
         og = [scipy.linalg.orth(np.random.randn(dim,dim)) for i in range(num_peaks)]
@@ -125,13 +110,128 @@ class Gaussian(object):
         ind = np.argmin( [self.do_evaluate(self.centers[i,:]) for i in range(num_peaks)] )
         self.fmin = mins[ind]
         self.min_loc = self.centers[ind,:]
-        self.fmax = 0.0
+        self.bounds = lzip([0] * self.dim, [1] * self.dim)
+
+        if self.log:
+            xs = [0, 1]
+            self.fmax = np.max([self.do_evaluate(xi) for xi in xs])
+        else:
+            self.fmax = 0
+
+
+    def do_evaluate(self, x):
+        x = np.array(x)
+
+
+
+        if self.log:
+            return np.sum( [-self.weights[i]*scipy.stats.multivariate_normal.logpdf(x, self.centers[i,:], self.variances[i]) for i in range(self.num_peaks)] )
+        else:
+            return np.sum( [-self.weights[i]*scipy.stats.multivariate_normal.pdf(x, self.centers[i,:], self.variances[i]) for i in range(self.num_peaks)] )
+
+def get_gaussian_functions(num, max_dim, num_peaks):
+    func_list = []
+    num_per_dim = int(num/max_dim)
+    return [get_gaussian_functions_of_dim(num_per_dim, i+1, num_peaks, log=False) for i in range(max_dim)]
+
+def get_log_gaussian_functions(num, max_dim, num_peaks):
+    func_list = []
+    num_per_dim = int(num/max_dim)
+    return [get_gaussian_functions_of_dim(num_per_dim, i+1, num_peaks, log=True) for i in range(max_dim)]
+
+def get_gaussian_functions_of_dim(num, dim=1, num_peaks=1, log=False):
+    return [Gaussian(dim = dim, num_peaks=num_peaks, seed=i, log=log) for i in range(num)]
+
+
+#######################################################################################################
+# Student t functions
+#######################################################################################################
+
+def multivariate_student_t(X, mu, Sigma, df, log=False):    
+    """ multivariate student T distribution """
+
+    [n,d] = X.shape
+    Xm = X-mu
+    V = df * Sigma
+
+    L = np.linalg.cholesky(V)
+
+    # log det of pi*V
+    logdet = 2*np.sum(np.log(np.diag(L))) + d*np.log(np.pi)
+
+    b = np.linalg.solve(L, Xm.T)
+
+    logz = gammaln(df/2.0 + d/2.0) - gammaln(df/2.0) - 0.5*logdet
+    logp = -0.5*(df+d)*np.log(1+ np.sum(b**2))
+
+    log_pdf = logp + logz            
+
+    if log:
+        return log_pdf
+    else:
+        return np.exp(log_pdf)    
+    
+
+class StudentT(object):
+    def __init__(self, dim=1, num_peaks=1, seed=None, safe_limit=0., log=False):
+
+        assert(num_peaks == 1)
+        assert(dim == 1)
+
+        if seed is not None:
+            np.random.seed(seed)
+
+        self.num_peaks = num_peaks
+        self.num_evals = 0
+        self.dim = dim
+        self.log = log
+        self.weights = np.random.rand(num_peaks)+np.finfo(float).eps
+        self.centers = np.random.rand(num_peaks, dim)*(1.-2.*safe_limit)+safe_limit
+        og = [scipy.linalg.orth(np.random.randn(dim,dim)) for i in range(num_peaks)]
+        self.variances = [np.dot(np.dot(og[i], np.diag(np.random.rand(dim)*0.9+0.1)), og[i].T) / 7. for i in range(num_peaks)]
+        mins = [self.do_evaluate(self.centers[i,:]) for i in range(num_peaks)]
+        ind = np.argmin( [self.do_evaluate(self.centers[i,:]) for i in range(num_peaks)] )
+        self.fmin = mins[ind]
+        self.min_loc = self.centers[ind,:]
+
+        if self.log:
+            xs = [0, 1]
+            self.fmax = np.max([self.do_evaluate(xi) for xi in xs])
+        else:
+            self.fmax = 0
+
+        # import ipdb; ipdb.set_trace()
+
         self.bounds = lzip([0] * self.dim, [1] * self.dim)
         
     def do_evaluate(self, x):
         x = np.array(x)
-        return np.sum( [-self.weights[i]*scipy.stats.multivariate_normal.pdf(x, self.centers[i,:], self.variances[i]) for i in range(self.num_peaks)] )
+        if self.log:
+            return np.sum( [-self.weights[i]*multivariate_student_t(np.atleast_2d(x), self.centers[i,:], self.variances[i], df=1, log=True) for i in range(self.num_peaks)] )
+        else:
+            return np.sum( [-self.weights[i]*multivariate_student_t(np.atleast_2d(x), self.centers[i,:], self.variances[i], df=1) for i in range(self.num_peaks)] )
 
+
+
+def get_student_t_functions(num, max_dim, num_peaks):
+    func_list = []
+    num_per_dim = int(num/max_dim)
+    return [get_student_t_functions_of_dim(num_per_dim, i+1, num_peaks) for i in range(max_dim)]
+
+def get_log_student_t_functions(num, max_dim, num_peaks):
+    func_list = []
+    num_per_dim = int(num/max_dim)
+    return [get_student_t_functions_of_dim(num_per_dim, i+1, num_peaks, log=True) for i in range(max_dim)]
+
+
+def get_student_t_functions_of_dim(num, dim=1, num_peaks=1, log=False):
+    return [StudentT(dim = dim, num_peaks=num_peaks, seed=i, log=log) for i in range(num)]
+
+
+
+#######################################################################################################
+# Tukey functions
+#######################################################################################################
 class Tukey(object):
     def __init__(self, dim=1, num_peaks=1, seed=None, safe_limit=0.):
 
@@ -155,36 +255,101 @@ class Tukey(object):
         
     def do_evaluate(self, x):
         x = np.array(x)
-        return np.sum( [-self.weights[i]*tukey_function(np.atleast_2d( (x-self.centers[i,:])/np.sqrt(self.variances[i]))) for i in range(self.num_peaks)] )
+        return np.sum( [-self.weights[i]*tukey_function(np.atleast_2d( 0.5*(x-self.centers[i,:])/np.sqrt(self.variances[i]))) for i in range(self.num_peaks)] )
 
 
-class StudentT(object):
-    def __init__(self, dim=1, num_peaks=1, seed=None, safe_limit=0.):
 
-        assert(num_peaks == 1)
+def get_tukey_functions(num, max_dim, num_peaks):
+    func_list = []
+    num_per_dim = int(num/max_dim)
+    return [get_tukey_functions_of_dim(num_per_dim, i+1, num_peaks) for i in range(max_dim)]
+
+def get_tukey_functions_of_dim(num, dim=1, num_peaks=1):
+    return [Tukey(dim = dim, num_peaks=num_peaks, seed=i) for i in range(num)]
+
+#######################################################################################################
+# Beta
+#######################################################################################################
+class Beta(object):
+    def __init__(self, dim=1, num_peaks=1, seed=None, safe_limit=0., log=False):
+
+        assert(dim==1)
 
         if seed is not None:
             np.random.seed(seed)
-
         self.num_peaks = num_peaks
         self.num_evals = 0
         self.dim = dim
+        self.log = log
+
         self.weights = np.random.rand(num_peaks)+np.finfo(float).eps
-        self.centers = np.random.rand(num_peaks, dim)*(1.-2.*safe_limit)+safe_limit
-        og = [scipy.linalg.orth(np.random.randn(dim,dim)) for i in range(num_peaks)]
-        self.variances = [np.dot(np.dot(og[i], np.diag(np.random.rand(dim)*0.9+0.1)), og[i].T) / 7. for i in range(num_peaks)]
+
+        self.alphas = 1 + np.random.poisson(5, size = (self.num_peaks, 1))
+        self.betas = 1+ np.random.poisson(5, size = (self.num_peaks, 1))
+
+
+        self.centers = (self.alphas - 1)/(self.alphas + self.betas - 2)[:, None]
+
+        # self.centers = np.random.rand(num_peaks, dim)*(1.-2.*safe_limit)+safe_limit
         mins = [self.do_evaluate(self.centers[i,:]) for i in range(num_peaks)]
         ind = np.argmin( [self.do_evaluate(self.centers[i,:]) for i in range(num_peaks)] )
         self.fmin = mins[ind]
         self.min_loc = self.centers[ind,:]
         self.fmax = 0.0
         self.bounds = lzip([0] * self.dim, [1] * self.dim)
+
+        if self.log:
+            xs = [1e-1, 1-1e-1]
+            self.fmax = np.max([self.do_evaluate(xi) for xi in xs])
+
+        else:
+            self.fmax = 0
+
+
         
     def do_evaluate(self, x):
         x = np.array(x)
-        # return np.sum( [-self.weights[i]*scipy.stats.t.pdf(x, df = 1, loc=self.centers[i,:], scale=np.sqrt(self.variances[i])) for i in range(self.num_peaks)] )
-        return np.sum( [-self.weights[i]*multivariate_student_t(np.atleast_2d(x), self.centers[i,:], self.variances[i], df=1) for i in range(self.num_peaks)] )
-        
+        if self.log:
+            return np.sum( [-self.weights[i]*scipy.stats.beta.logpdf(x, self.alphas[i], self.betas[i]) for i in range(self.num_peaks)] )
+        else:
+            return np.sum( [-self.weights[i]*scipy.stats.beta.pdf(x, self.alphas[i], self.betas[i]) for i in range(self.num_peaks)] )
+
+def get_beta_functions(num, max_dim, num_peaks):
+    func_list = []
+    num_per_dim = int(num/max_dim)
+    return [get_beta_functions_of_dim(num_per_dim, i+1, num_peaks) for i in range(max_dim)]
+
+def get_log_beta_functions(num, max_dim, num_peaks):
+    func_list = []
+    num_per_dim = int(num/max_dim)
+    return [get_beta_functions_of_dim(num_per_dim, i+1, num_peaks, log=True) for i in range(max_dim)]
+
+
+def get_beta_functions_of_dim(num, dim=1, num_peaks=1, log=False):
+    return [Beta(dim = dim, num_peaks=num_peaks, seed=i, log=log) for i in range(num)]
+
+
+
+#######################################################################################################
+# Auxilary functions
+#######################################################################################################
+test_function_dict = OrderedDict( [ ('gaussian', get_gaussian_functions),
+                                    ('student_t', get_student_t_functions),
+                                    ('beta', get_beta_functions),
+                                    ('tukey', get_tukey_functions),
+                                    ('log_gaussian', get_log_gaussian_functions),
+                                    ('log_student_t', get_log_student_t_functions),
+                                    ('log_beta', get_log_beta_functions) ])
+                                    
+
+
+def lzip(*args):
+    """
+    Zip, but returns zipped result as a list.
+    """
+    return list(zip(*args))
+
+
 def function_of_dimension(funcs, dim):
     ret = []
     for func in funcs:
@@ -194,31 +359,7 @@ def function_of_dimension(funcs, dim):
             pass
     return ret
 
-def get_gaussian_functions(num, max_dim, num_peaks):
-    func_list = []
-    num_per_dim = int(num/max_dim)
-    return [get_gaussian_functions_of_dim(num_per_dim, i+1, num_peaks) for i in range(max_dim)]
 
-def get_student_t_functions(num, max_dim, num_peaks):
-    func_list = []
-    num_per_dim = int(num/max_dim)
-    return [get_student_t_functions_of_dim(num_per_dim, i+1, num_peaks) for i in range(max_dim)]
-
-
-def get_tukey_functions(num, max_dim, num_peaks):
-    func_list = []
-    num_per_dim = int(num/max_dim)
-    return [get_tukey_functions_of_dim(num_per_dim, i+1, num_peaks) for i in range(max_dim)]
-
-def get_gaussian_functions_of_dim(num, dim=1, num_peaks=1,):
-    return [Gaussian(dim = dim, num_peaks=num_peaks, seed=i) for i in range(num)]
-
-def get_student_t_functions_of_dim(num, dim=1, num_peaks=1,):
-    return [StudentT(dim = dim, num_peaks=num_peaks, seed=i) for i in range(num)]
-
-
-def get_tukey_functions_of_dim(num, dim=1, num_peaks=1,):
-    return [Tukey(dim = dim, num_peaks=num_peaks, seed=i) for i in range(num)]
 
 def noisify_functions(func_list, noise_level):
     if isinstance(func_list, list):
@@ -231,3 +372,5 @@ def normalize_functions(func_list):
         return [normalize_functions(func) for func in func_list]
     else:
         return Normalizer(func_list)
+
+

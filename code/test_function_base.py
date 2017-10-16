@@ -308,7 +308,11 @@ class Beta(object):
 
         
     def do_evaluate(self, x):
+
+        x = np.min((x, 1-1e-6))
+        x = np.max((x, 1e-6))
         x = np.array(x)
+
         if self.log:
             return np.sum( [-self.weights[i]*scipy.stats.beta.logpdf(x, self.alphas[i], self.betas[i]) for i in range(self.num_peaks)] )
         else:

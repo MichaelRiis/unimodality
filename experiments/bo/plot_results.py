@@ -10,7 +10,7 @@ from collections import OrderedDict
 from os import listdir
 from os.path import isfile, join
 
-sys.path.append('../code/')
+sys.path.append('../../code/')
 from util import plot_with_uncertainty
 import test_function_base
 

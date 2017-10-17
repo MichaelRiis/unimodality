@@ -7,7 +7,7 @@ import os
 from os import listdir
 from os.path import isfile, join
 
-sys.path.append('../code/')
+sys.path.append('../../code/')
 import test_function_base
 import bayesian_optimization as bo
 
@@ -20,8 +20,10 @@ parser.add_argument('--function_class',  help='Function class', default='gaussia
 parser.add_argument('--seed', type=int, help='Seed', default=0)
 parser.add_argument('--target_directory', help='Output directory', default = 'results')
 parser.add_argument('--noise_std', type = float, help='Standard deviation of noise', default = 0.05)
-parser.add_argument('--maxitt', type=int, help='Number of iterations', default=25)
-parser.add_argument('--dim', type=int, help='dimension', default=2)
+parser.add_argument('--maxitt', type=int, help='Number of iterations', default=17)
+parser.add_argument('--dim', type=int, help='dimension', default=1)
+parser.add_argument('--save', type=int, help='save results', default=1)
+parser.add_argument('--plot', type=int, help='plot model predictions', default=0)
 
 # extract
 args = parser.parse_args()
@@ -30,6 +32,8 @@ noise_std = args.noise_std
 maxitt = args.maxitt
 function_class = args.function_class
 dim = args.dim
+plot = args.plot
+save = args.save
 
 # store settings in dict
 settings_dict = {'target_directory': target_directory,
@@ -44,6 +48,7 @@ settings_dict = {'target_directory': target_directory,
 target_directory += "_%s_%dd" % (function_class, dim)
 
 
+
 #############################################################################################################
 # Print experiment settings
 #############################################################################################################
@@ -56,23 +61,32 @@ print('Dim:\t\t%d' % dim)
 print('Seed:\t\t%d' % seed)
 print('Max itt:\t%d' % maxitt)
 print('Noise std:\t%4.3e' % noise_std)
-print('Target dir:\t%s\n\n' % target_directory)
+print('Target dir:\t%s' % target_directory)
+print('Plot:\t\t%s' % plot)
+print('Save:\t\t%d\n\n' % save)
 
 
 #############################################################################################################
 # Define test problems
 #############################################################################################################
-num_functions = 200
+dim = 1
+num_functions = 100
 num_peaks = 1
 
 # set seed
 np.random.seed(seed)
 
-if function_class == "gaussian":
-	functions0 = test_function_base.get_gaussian_functions(num_functions, dim, num_peaks)
-elif function_class == "student_t":
-	functions0 = test_function_base.get_student_t_functions(num_functions, dim, num_peaks)
+# check for valid function class
+if not function_class in test_function_base.test_function_dict:
+	print('Function class "%s" not found' % function_class)
+	raise ValueError('Function class "%s" not found' % function_class)
 
+
+# get test functions
+factory_function = test_function_base.test_function_dict[function_class]
+functions0 = factory_function(num_functions, dim, num_peaks)
+
+# normalize and add noise
 functions = test_function_base.normalize_functions(functions0)	
 noisy_functions = test_function_base.noisify_functions(functions, noise_std)      
 
@@ -84,20 +98,20 @@ num_points = initial_points + maxitt
 # Model factory
 #############################################################################################################
 def regular(function_idx):
-	return bo.BayesianOptimization(func_id=function_idx, func=noisy_functions[1][function_idx], acquisition_function=bo.EI, max_iter=maxitt, noise=noise_std)
+	return bo.BayesianOptimization(func_id=function_idx, func=noisy_functions[0][function_idx], acquisition_function=bo.EI, max_iter=maxitt, noise=noise_std)
 
 def unimodal(fun):
-	return bo.UnimodalBayesianOptimization(func_id=function_idx, func=noisy_functions[1][function_idx], acquisition_function=bo.EI, max_iter=maxitt, noise=noise_std)
+	return bo.UnimodalBayesianOptimization(func_id=function_idx, func=noisy_functions[0][function_idx], acquisition_function=bo.EI, max_iter=maxitt, noise=noise_std)
 
 def unimodal_g(fun):
-	return bo.UnimodalBayesianOptimization(func_id=function_idx, func=noisy_functions[1][function_idx], acquisition_function=bo.EI, max_iter=maxitt, noise=noise_std, g_constraints=True)
+	return bo.UnimodalBayesianOptimization(func_id=function_idx, func=noisy_functions[0][function_idx], acquisition_function=bo.EI, max_iter=maxitt, noise=noise_std, g_constraints=True)
 
 
 #############################################################################################################
 # Run models
 #############################################################################################################
 models = {'regular': regular, 'unimodal': unimodal, 'unimodal2': unimodal_g}
-
+models_optimized = {}
 
 # preallocate
 results_X = {name: np.zeros((num_points, dim)) for name in models}
@@ -119,21 +133,62 @@ for name, model_constructor in models.items():
 	t1 = time.time()
 	print('Finished running %s in %4.3fs' % (name, t1-t0))
 
+	# store
+	models_optimized[name] = model
 
 
 #############################################################################################################
 # Save results
 #############################################################################################################
 
-# to be saved
-save_dict = {'settings_dict': settings_dict, 'results_X': results_X, 'results_Y': results_Y}
+if save:
 
-# create directory
-if not os.path.exists(target_directory):
-	os.makedirs(target_directory)
-	print('Created directory:\t%s' % target_directory)
+	# to be saved
+	save_dict = {'settings_dict': settings_dict, 'results_X': results_X, 'results_Y': results_Y}
 
-# save to file
-outputfile = join(target_directory, "%s_%dd_idx%d_seed%d" % (function_class, dim, function_idx, seed))
-np.savez(outputfile, **save_dict)
-print('Saved to file: %s.npz' % outputfile)
+	# create directory
+	if not os.path.exists(target_directory):
+		os.makedirs(target_directory)
+		print('Created directory:\t%s' % target_directory)
+
+	# save to file
+	outputfile = join(target_directory, "%s_%dd_idx%d_seed%d" % (function_class, dim, function_idx, seed))
+	np.savez(outputfile, **save_dict)
+	print('Saved to file: %s.npz' % outputfile)
+
+
+
+#############################################################################################################
+# Plot results?
+#############################################################################################################
+
+if plot:
+
+	import pylab as plt
+	import seaborn as snb
+	from util import plot_with_uncertainty
+
+	xs = np.linspace(-0.1, 1.1, 101)[:, None]
+	ys = [functions[0][function_idx].do_evaluate(xi) for xi in xs]
+	colors = snb.color_palette()
+
+	for (name, model), color in zip(models_optimized.items(), colors):
+		print('Plotting %s' % name)
+
+		mu, var = model.model.predict(xs)
+		plot_with_uncertainty(xs, mu, var, label=name, color=color)
+
+	plt.plot(xs, ys, 'g--', label='True')
+	plt.legend()
+	plt.grid(True)
+	plt.show()
+
+
+
+		
+
+
+
+
+
+

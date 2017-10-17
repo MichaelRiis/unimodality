@@ -299,7 +299,7 @@ class Beta(object):
         self.bounds = lzip([0] * self.dim, [1] * self.dim)
 
         if self.log:
-            xs = [1e-1, 1-1e-1]
+            xs = [1e-6, 1-1e-6]
             self.fmax = np.max([self.do_evaluate(xi) for xi in xs])
 
         else:

@@ -70,7 +70,7 @@ print('Save:\t\t%d\n\n' % save)
 # Define test problems
 #############################################################################################################
 dim = 1
-num_functions = 100
+num_functions = 500
 num_peaks = 1
 
 # set seed

@@ -1,7 +1,7 @@
 import numpy as np
 import sys
 
-sys.path.append('../code/')
+sys.path.append('../../code/')
 import test_function_base
 
 output_filebase = "run_1d_batch"

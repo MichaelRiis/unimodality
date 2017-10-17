@@ -50,7 +50,7 @@ for idx_job in range(num_jobs):
 	f.write('\n')
 
 	# move first part of 'lines' to 'current_lines'
-	current_lines = [lines.pop(0) for idx_line in range(lines_per_job)]
+	current_lines = [lines.pop(0) for idx_line in range(min(lines_per_job, len(lines)))]
 
 	for line in current_lines:
 		f.write(line + '\n')

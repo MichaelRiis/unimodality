@@ -1,5 +1,6 @@
 import numpy as np
 import pylab as plt
+import time
 
 
 def plot_with_uncertainty(x, y, yvar=None, color='r', linestyle='-', fill=True, label=''):
@@ -30,3 +31,16 @@ def mult_diag(d, mtx, left=True):
         return (d*mtx.T).T
     else:
         return d*mtx
+
+
+def timeit(method):
+
+    def timed(*args, **kw):
+        ts = time.time()
+        result = method(*args, **kw)
+        te = time.time()
+
+        print('%s() done in  %2.2fs' % (method.__name__, te-ts))
+        return result
+
+    return timed

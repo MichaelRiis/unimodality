@@ -11,7 +11,7 @@ base_str = "python run_bioassay_vs_N.py"
 function_classes = test_function_base.test_function_dict.keys()
 
 max_seeds = 200
-lines_per_job = 50
+lines_per_job = 10
 time_per_line = 15
 
 # generate run line for each run

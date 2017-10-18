@@ -90,8 +90,9 @@ class UnimodalGP(GPy.core.Model):
         # check for extremely small lengthscales
         # TODO: find cause or find better solution
         g_lengthscales = np.stack([kg_kernel['.*lengthscale'] for kg_kernel in self.Kg_kernel_list])
-        if np.any(self.Kf_kernel['.*lengthscale'] < 1e-6) or np.any(g_lengthscales < 1e-6):
-            print('Warning: at least one lengthscale is extremely small. EP cannot run, so we will just return logZ = -np.inf')
+        g_variances = np.stack([kg_kernel['.*variance'] for kg_kernel in self.Kg_kernel_list])
+        if np.any(self.Kf_kernel['.*lengthscale'] < 1e-6) or np.any(g_lengthscales < 1e-6) or np.any(g_variances < 1e-10):
+            print('Warning: at least one hyperparameter is extreme. EP cannot run, so we will just return logZ = -np.inf')
             self._log_lik = -np.Inf
 
             print(100*'-')

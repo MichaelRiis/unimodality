@@ -45,7 +45,7 @@ for idx_job in range(num_jobs):
 
 	f.write('#!/bin/bash\n')
 	f.write('#SBATCH --time=0-%02d:00:00\n' % hours_per_job)
-	f.write('#SBATCH --mem-per-cpu=1000\n')
+	f.write('#SBATCH --mem-per-cpu=2000\n')
 	f.write('\n')
 
 	# move first part of 'lines' to 'current_lines'

@@ -95,7 +95,7 @@ def predict_grid(model, A, B):
 def compute_KL(model):
 
 	# define grid points for integration
-	num_A, num_B = 1000, 1000
+	num_A, num_B = 300, 300
 	A, B = np.linspace(-4, 8, num_A), np.linspace(-10, 40, num_B)
 
 	# predict approximate density for unimodal

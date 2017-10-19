@@ -94,6 +94,7 @@ def predict_grid(model, A, B):
 @timeit
 def compute_KL(model):
 
+
 	# define grid points for integration
 	num_A, num_B = 300, 300
 	A, B = np.linspace(-4, 8, num_A), np.linspace(-10, 40, num_B)
@@ -118,6 +119,7 @@ def compute_KL(model):
 
 	# compute log approximation log(E[exp(f)]) and it's normalization
 	log_approx = mu + 0.5*var
+	log_approx -= np.max(log_approx)
 	Zapprox = integrate(np.exp(log_approx))
 
 	# compute KL

@@ -118,7 +118,7 @@ def compute_KL(model):
 	Ztrue = integrate(np.exp(log_true))
 
 	# compute log approximation log(E[exp(f)]) and it's normalization
-	log_approx = mu + 0.5*var
+	log_approx = mu - var
 	log_approx -= np.max(log_approx)
 	Zapprox = integrate(np.exp(log_approx))
 

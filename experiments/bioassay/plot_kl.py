@@ -89,35 +89,25 @@ colors = snb.color_palette()
 
 # read data
 KLs = read_from_directory(directory)
+Ns = np.arange(5, 100+1, 5, dtype=int)
 
 plt.figure()
 for name, color in zip(methods, colors):
-	X, Y = Ns = np.arange(5, 100+1, 5, dtype=int), KLs[name]
-	Y_mean, Y_var = np.mean(Y, axis=0), np.var(Y, axis=0)/len(X)
-	plot_with_uncertainty(np.arange(1, len(Y_mean) + 1), Y_mean, yvar=Y_var, color=color, label=name)
+	X, Y = Ns, KLs[name]
 
+	# check for inf and remove
+	inf_list = [np.any(np.isinf(y)) for y in Y]
+	print('%s: Found %d runs containing inf values' % (name, np.sum(inf_list)))
+	Y = [y for (y, is_inf) in zip(Y, inf_list) if not is_inf]
 
-# plt.subplot(2, int(np.ceil(len(function_classes)/2)), 1 + idx_class)
+	Y_mean, Y_var = np.mean(Y, axis=0), np.var(Y, axis=0)/len(Y)
+	plot_with_uncertainty(Ns, Y_mean, yvar=Y_var, color=color, label=name)
 
-# print( int(np.ceil(len(function_classes))/2), 1 + idx_class)
-
-# metric_fun = metrics[metric_name]
-
-# for name, color in zip(models, colors):
-
-# 	X, Y = metric_fun(results_X[name], results_Y[name])
-
-# 	Y_mean, Y_var = np.mean(Y, axis=0), np.var(Y, axis=0)/len(X)
-
-# 	plot_with_uncertainty(np.arange(1, len(Y_mean) + 1), Y_mean, yvar=Y_var, color=color, label=name)
 
 plt.legend()
 plt.grid(True)
-
-# if idx_class == len(function_classes)-1:
-# 	plt.xlabel('Number of iterations')
-# plt.ylabel(metric_name)
-# plt.title(function_class + ' (%dD)' % dim)
+plt.xlabel('Number of samples')
+plt.ylabel('KL divergence')
 plt.show()
 
 

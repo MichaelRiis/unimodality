@@ -82,7 +82,7 @@ def compute_laplace():
     res = minimize(value_and_grad(obj), np.array((0.3, 10.)), jac=True)
     mode = res.x
     hess = hessian(obj)(mode)
-    S = np.linalg.inv(hess)
+    S = 2*np.linalg.inv(hess)
 
     print('Found mode\t(a,b) = %r' % mode)
     print('Found covariance\t (a,b) = %r' % S)
@@ -199,7 +199,7 @@ def compute_KL(model):
 	Ztrue = integrate(np.exp(log_true))
 
 	# compute log approximation log(E[exp(f)]) and it's normalization
-	log_approx = mu - var
+	log_approx = mu + 0.5*var
 	log_approx -= np.max(log_approx)
 	Zapprox = integrate(np.exp(log_approx))
 

@@ -61,7 +61,7 @@ Xfull = np.random.uniform(size = (Nfull, 2))*np.array([12, 50]) + np.array([-4, 
 Yfull = np.stack([-bioassay.log_posterior(a,b) for (a,b) in Xfull])[:, None]
 
 # methods
-methods = {'Regular': bioassay.fit_regular, 'Unimodal': bioassay.fit_unimodal}
+methods = {'Regular': bioassay.fit_regular, 'Unimodal': bioassay.fit_unimodal, 'Regular + mean function': bioassay.fit_regular_gauss}
 KLs = {method: [] for method in methods}
 
 for idx_N, N in enumerate(Ns):
@@ -94,7 +94,7 @@ if save:
 
 
 	# to be saved
-	save_dict = {'settings_dict': settings_dict, 'KLs': KLs}
+	save_dict = {'settings_dict': settings_dict, 'KLs': KLs, 'Ns': Ns}
 
 	# create directory
 	if not os.path.exists(target_directory):

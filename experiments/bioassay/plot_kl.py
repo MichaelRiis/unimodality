@@ -14,7 +14,7 @@ sys.path.append('../../code/')
 from util import plot_with_uncertainty
 import test_function_base
 
-methods = ['Regular', 'Unimodal']
+methods = ['Regular', 'Regular + mean function', 'Unimodal']
 
 #############################################################################################################
 # Read all files in directory

@@ -199,7 +199,9 @@ def compute_KL(model):
 	Ztrue = integrate(np.exp(log_true))
 
 	# compute log approximation log(E[exp(f)]) and it's normalization
-	log_approx = mu + 0.5*var
+	# log_approx = mu + 0.5*var
+	# log_approx = mu - var
+	log_approx = mu
 	log_approx -= np.max(log_approx)
 	Zapprox = integrate(np.exp(log_approx))
 
@@ -208,6 +210,46 @@ def compute_KL(model):
 	KL = R/Ztrue - np.log(Ztrue) + np.log(Zapprox)
 
 	return KL
+
+
+def compute_gauss_KL(mu, cov):
+
+
+	# define grid points for integration
+	num_A, num_B = 300, 300
+	A, B = np.linspace(-4, 8, num_A), np.linspace(-10, 40, num_B)
+
+	# evaluate true posterior
+	log_true = evaluate_log_posterior_grid(A, B)
+
+	def integrate(W):
+		""" Helper function """
+		# do a 1-D integral over every row
+		I = np.zeros( num_B )
+		for i in range(num_B):
+		    I[i] = np.trapz( W[i,:], A )
+		# then an integral over the result
+		return np.trapz( I, B )
+
+	# compute normalizations
+	Ztrue = integrate(np.exp(log_true))
+
+	# compute log approximation log(E[exp(f)]) and it's normalization
+	# log_approx = mu + 0.5*var
+	L = np.linalg.cholesky(cov)
+	AA, BB = np.meshgrid(A, B)
+	AB = np.column_stack((AA.ravel(), BB.ravel()))
+	log_approx = log_mvn_chol(AB, mu, L).reshape((len(A), len(B)))
+	log_approx -= np.max(log_approx)
+ 
+	Zapprox = integrate(np.exp(log_approx))
+
+	# compute KL
+	R = integrate(np.exp(log_true)*(log_true - log_approx))
+	KL = R/Ztrue - np.log(Ztrue) + np.log(Zapprox)
+
+	return KL
+
 
 #############################################################################################
 # Functions for computing prior, likelihood and posteriors

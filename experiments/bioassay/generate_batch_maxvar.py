@@ -6,7 +6,7 @@ import test_function_base
 
 output_filebase = "batch_maxvar"
 
-base_str = "python run_maxvar"
+base_str = "python run_maxvar.py"
 
 function_classes = test_function_base.test_function_dict.keys()
 

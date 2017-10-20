@@ -13,6 +13,7 @@ from os.path import isfile, join
 sys.path.append('../../code/')
 from util import plot_with_uncertainty
 import test_function_base
+import bioassay
 
 methods = ['Regular', 'Regular + mean function', 'Unimodal']
 
@@ -41,18 +42,29 @@ def read_from_directory(directory):
 		files.append(f)
 
 	num_files = len(files)
-	print('Found %d valid files in total in %s' % (num_files, directory))
+	print('Found %d valid files in total in %s\n' % (num_files, directory))
 
 
 	# load data
-	KLs = {name: [] for name in methods}
+
+	KLs = {log_map: {method: [] for method in methods} for log_map in bioassay.log_density_maps}
+	TVs = {log_map: {method: [] for method in methods} for log_map in bioassay.log_density_maps}
+
+
 	for f, idx in zip(files, ids):
 
 		raw_data = np.load(join(directory, f))
-		for name, values in raw_data['KLs'][()].items():	
-			KLs[name].append(values)
+		KLf =  raw_data['KLs'][()]
+		TVf =  raw_data['TVs'][()]
 
-	return KLs
+		for log_map in bioassay.log_density_maps:
+			for method in methods:
+				KLs[log_map][method].append(KLf[log_map][method])
+				TVs[log_map][method].append(TVf[log_map][method])
+
+
+
+	return KLs, TVs
 
 #############################################################################################################
 # Metrics as a function of iterations
@@ -85,29 +97,52 @@ directory = args.directory
 # Plot
 #############################################################################################################
 colors = snb.color_palette()
+snb.set(font_scale =0.8)
 
 
 # read data
-KLs = read_from_directory(directory)
 Ns = np.arange(5, 100+1, 5, dtype=int)
 
 plt.figure()
-for name, color in zip(methods, colors):
-	X, Y = Ns, KLs[name]
 
-	# check for inf and remove
-	inf_list = [np.any(np.isinf(y)) for y in Y]
-	print('%s: Found %d runs containing inf values' % (name, np.sum(inf_list)))
-	Y = [y for (y, is_inf) in zip(Y, inf_list) if not is_inf]
-
-	Y_mean, Y_var = np.mean(Y, axis=0), np.var(Y, axis=0)/len(Y)
-	plot_with_uncertainty(Ns, Y_mean, yvar=Y_var, color=color, label=name)
+Y_KL, Y_TV = read_from_directory(directory)
+metrics = {'KL': Y_KL, 'TV': Y_TV}
 
 
-plt.legend()
-plt.grid(True)
-plt.xlabel('Number of samples')
-plt.ylabel('KL divergence')
+fig = plt.figure()
+
+for idx_metric, metric_name in enumerate(metrics):
+	
+	for idx_log_map, log_map in enumerate(bioassay.log_density_maps):
+
+		plt.subplot2grid((len(metrics), len(bioassay.log_density_maps)), (idx_metric, idx_log_map))
+		plt.title('%s for %s' % (metric_name, log_map))
+
+		for method, color in zip(methods, colors):
+
+			X = Ns
+			Y = metrics[metric_name][log_map][method]
+
+			# check for inf and remove
+			inf_list = [np.any(np.isinf(y)) for y in Y]
+			print('%s: Found %d runs containing inf values' % (method, np.sum(inf_list)))
+			Y = [y for (y, is_inf) in zip(Y, inf_list) if not is_inf]
+
+			Y_mean, Y_var = np.mean(Y, axis=0), np.var(Y, axis=0)/len(Y)
+			plot_with_uncertainty(Ns, Y_mean, yvar=Y_var, color=color, label=method)
+
+
+		plt.legend()
+		plt.grid(True)
+
+		if idx_metric == 1:
+			plt.xlabel('Number of samples')
+		
+		if idx_log_map == 0:
+			plt.ylabel(metric_name)
+
+		print('\n')
+
 plt.show()
 
 

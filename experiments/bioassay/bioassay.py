@@ -96,8 +96,8 @@ def compute_laplace():
 #############################################################################################
 
 # use same kernel for f
-rbf = GPy.kern.RBF(input_dim=2)
-bias = GPy.kern.RBF(input_dim=2, lengthscale=1., variance=1.)
+rbf = GPy.kern.RBF(input_dim=2, lengthscale=1., variance=1.)
+bias = GPy.kern.Bias(input_dim=2)
 
 # add priors for rbf
 rbf.variance.unconstrain()

@@ -212,7 +212,7 @@ def compute_TV(model, log_map='mean'):
 	Zapprox = integrate(np.exp(log_approx))
 
 	# compute TV
-	TV = integrate(np.abs(np.exp(log_true)/Zapprox -  np.exp(log_true)/Ztrue))
+	TV = 0.5*integrate(np.abs(np.exp(log_approx)/Zapprox -  np.exp(log_true)/Ztrue))
 
 	return TV
 
@@ -249,7 +249,7 @@ def compute_gauss_TV(mu, cov):
 	Zapprox = integrate(np.exp(log_approx))
 
 	# compute TV
-	TV = integrate(np.abs(np.exp(log_true)/Zapprox -  np.exp(log_true)/Ztrue))
+	TV = 0.5*integrate(np.abs(np.exp(log_approx)/Zapprox -  np.exp(log_true)/Ztrue))
 
 	return TV
 

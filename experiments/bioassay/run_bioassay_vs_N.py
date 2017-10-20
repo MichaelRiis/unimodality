@@ -62,7 +62,9 @@ Yfull = np.stack([-bioassay.log_posterior(a,b) for (a,b) in Xfull])[:, None]
 
 # methods
 methods = {'Regular': bioassay.fit_regular, 'Unimodal': bioassay.fit_unimodal, 'Regular + mean function': bioassay.fit_regular_gauss}
-KLs = {method: [] for method in methods}
+KLs_mean = {method: [] for method in methods}
+KLs_mode = {method: [] for method in methods}
+KLs_median = {method: [] for method in methods}
 
 for idx_N, N in enumerate(Ns):
 
@@ -75,11 +77,18 @@ for idx_N, N in enumerate(Ns):
 		print('Fitting %s GP with N = %d....' % (method, N))
 		print(100*'-')
 
-		# fit model and compute KL			
+		# fit model
 		model = method_fun(X, Y)
-		KLs[method].append(bioassay.compute_KL(model))
 
-		print('Fitted %s GP with N = %d. KL = %4.3f\n\n' % (method, N, KLs[method][-1]))
+		# compute KL using each estimate
+		KLs_mean[method].append(bioassay.compute_KL(model, log_map='mean'))
+		KLs_mode[method].append(bioassay.compute_KL(model, log_map='mode'))
+		KLs_median[method].append(bioassay.compute_KL(model, log_map='median'))
+
+		print('\nFitted %s GP with N = %d' % (method, N))
+		print('\tKL (mean):\t%4.3f' % KLs_mean[method][-1])
+		print('\tKL (mode):\t%4.3f' % KLs_mode[method][-1])
+		print('\tKL (median):\t%4.3f\n\n' % KLs_median[method][-1])
 
 
 #############################################################################################################
@@ -94,7 +103,7 @@ if save:
 
 
 	# to be saved
-	save_dict = {'settings_dict': settings_dict, 'KLs': KLs, 'Ns': Ns}
+	save_dict = {'settings_dict': settings_dict, 'KLs_mean': KLs_mean, 'KLs_mode': KLs_mode, 'KLs_median': KLs_median, 'Ns': Ns}
 
 	# create directory
 	if not os.path.exists(target_directory):

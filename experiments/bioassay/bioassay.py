@@ -172,10 +172,16 @@ def predict_grid(model, A, B):
 #############################################################################################
 # KL-divergence
 #############################################################################################
+log_density_maps = {'mean': 	lambda mu, var: mu + 0.5*var,
+					'mode': 	lambda mu, var: mu - var,
+					'median': 	lambda mu, var: mu}
+
 @timeit
-def compute_KL(model):
+def compute_KL(model, log_map='mean'):
 
-
+	# get map
+	log_density_map = log_density_maps[log_map]
+	
 	# define grid points for integration
 	num_A, num_B = 300, 300
 	A, B = np.linspace(-4, 8, num_A), np.linspace(-10, 40, num_B)
@@ -198,10 +204,8 @@ def compute_KL(model):
 	# compute normalizations
 	Ztrue = integrate(np.exp(log_true))
 
-	# compute log approximation log(E[exp(f)]) and it's normalization
-	# log_approx = mu + 0.5*var
-	# log_approx = mu - var
-	log_approx = mu
+	# compute log approximation and it's normalization
+	log_approx = log_density_map(mu, var)
 	log_approx -= np.max(log_approx)
 	Zapprox = integrate(np.exp(log_approx))
 

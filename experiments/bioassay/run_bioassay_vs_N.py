@@ -62,9 +62,14 @@ Yfull = np.stack([-bioassay.log_posterior(a,b) for (a,b) in Xfull])[:, None]
 
 # methods
 methods = {'Regular': bioassay.fit_regular, 'Unimodal': bioassay.fit_unimodal, 'Regular + mean function': bioassay.fit_regular_gauss}
-KLs_mean = {method: [] for method in methods}
-KLs_mode = {method: [] for method in methods}
-KLs_median = {method: [] for method in methods}
+
+KLs = {log_map: {method: [] for method in methods} for log_map in bioassay.log_density_maps}
+TVs = {log_map: {method: [] for method in methods} for log_map in bioassay.log_density_maps}
+
+
+# KLs_mean = {method: [] for method in methods}
+# KLs_mode = {method: [] for method in methods}
+# KLs_median = {method: [] for method in methods}
 
 for idx_N, N in enumerate(Ns):
 
@@ -80,15 +85,15 @@ for idx_N, N in enumerate(Ns):
 		# fit model
 		model = method_fun(X, Y)
 
-		# compute KL using each estimate
-		KLs_mean[method].append(bioassay.compute_KL(model, log_map='mean'))
-		KLs_mode[method].append(bioassay.compute_KL(model, log_map='mode'))
-		KLs_median[method].append(bioassay.compute_KL(model, log_map='median'))
-
+		# compute KL & TV for each estimate and print results
 		print('\nFitted %s GP with N = %d' % (method, N))
-		print('\tKL (mean):\t%4.3f' % KLs_mean[method][-1])
-		print('\tKL (mode):\t%4.3f' % KLs_mode[method][-1])
-		print('\tKL (median):\t%4.3f\n\n' % KLs_median[method][-1])
+		
+		for log_map in bioassay.log_density_maps:
+			KLs[log_map][method].append(bioassay.compute_KL(model, log_map=log_map))
+			TVs[log_map][method].append(bioassay.compute_TV(model, log_map=log_map))
+
+			print('\tKL (%s):\t%4.3f' % (log_map, KLs[log_map][method][-1]))
+			print('\tTV (%s):\t%4.3f\n' % (log_map, TVs[log_map][method][-1]))
 
 
 #############################################################################################################
@@ -103,7 +108,7 @@ if save:
 
 
 	# to be saved
-	save_dict = {'settings_dict': settings_dict, 'KLs_mean': KLs_mean, 'KLs_mode': KLs_mode, 'KLs_median': KLs_median, 'Ns': Ns}
+	save_dict = {'settings_dict': settings_dict, 'KLs': KLs, 'TVs': TVs,  'Ns': Ns}
 
 	# create directory
 	if not os.path.exists(target_directory):
@@ -129,3 +134,4 @@ if plot:
 	plt.ylabel('KL')
 	plt.legend()
 	plt.show()
+

@@ -170,11 +170,93 @@ def predict_grid(model, A, B):
 	return mu, var
 
 #############################################################################################
+# Total variance
+#############################################################################################
+log_density_maps = {'mean': 	lambda mu, var=0: mu + 0.5*var,
+					'mode': 	lambda mu, var=0: mu - var,
+					'median': 	lambda mu, var=0: mu}
+
+
+@timeit
+def compute_TV(model, log_map='mean'):
+
+	# get map
+	log_density_map = log_density_maps[log_map]
+	
+	# define grid points for integration
+	num_A, num_B = 300, 300
+	A, B = np.linspace(-4, 8, num_A), np.linspace(-10, 40, num_B)
+
+	# predict approximate density for unimodal
+	mu, var = predict_grid(model, A, B)
+
+	# evaluate true posterior
+	log_true = evaluate_log_posterior_grid(A, B)
+	log_true -= np.max(log_true)
+
+	def integrate(W):
+		""" Helper function """
+		# do a 1-D integral over every row
+		I = np.zeros( num_B )
+		for i in range(num_B):
+		    I[i] = np.trapz( W[i,:], A )
+		# then an integral over the result
+		return np.trapz( I, B )
+
+	# compute normalizations
+	Ztrue = integrate(np.exp(log_true))
+
+	# compute log approximation and it's normalization
+	log_approx = log_density_map(mu, var)
+	log_approx -= np.max(log_approx)
+	Zapprox = integrate(np.exp(log_approx))
+
+	# compute TV
+	TV = integrate(np.abs(np.exp(log_true)/Zapprox -  np.exp(log_true)/Ztrue))
+
+	return TV
+
+
+def compute_gauss_TV(mu, cov):
+
+
+	# define grid points for integration
+	num_A, num_B = 300, 300
+	A, B = np.linspace(-4, 8, num_A), np.linspace(-10, 40, num_B)
+
+	# evaluate true posterior
+	log_true = evaluate_log_posterior_grid(A, B)
+
+	def integrate(W):
+		""" Helper function """
+		# do a 1-D integral over every row
+		I = np.zeros( num_B )
+		for i in range(num_B):
+		    I[i] = np.trapz( W[i,:], A )
+		# then an integral over the result
+		return np.trapz( I, B )
+
+	# compute normalizations
+	Ztrue = integrate(np.exp(log_true))
+
+	# compute log approximation log(E[exp(f)]) and it's normalization
+	# log_approx = mu + 0.5*var
+	L = np.linalg.cholesky(cov)
+	AA, BB = np.meshgrid(A, B)
+	AB = np.column_stack((AA.ravel(), BB.ravel()))
+	log_approx = log_mvn_chol(AB, mu, L).reshape((len(A), len(B)))
+	log_approx -= np.max(log_approx)
+	Zapprox = integrate(np.exp(log_approx))
+
+	# compute TV
+	TV = integrate(np.abs(np.exp(log_true)/Zapprox -  np.exp(log_true)/Ztrue))
+
+	return TV
+
+
+#############################################################################################
 # KL-divergence
 #############################################################################################
-log_density_maps = {'mean': 	lambda mu, var: mu + 0.5*var,
-					'mode': 	lambda mu, var: mu - var,
-					'median': 	lambda mu, var: mu}
 
 @timeit
 def compute_KL(model, log_map='mean'):

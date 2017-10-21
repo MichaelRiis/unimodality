@@ -12,7 +12,7 @@ function_classes = test_function_base.test_function_dict.keys()
 
 max_seeds = 50
 lines_per_job = 5
-time_per_line = 40
+time_per_line = 60
 
 # generate run line for each run
 lines = []

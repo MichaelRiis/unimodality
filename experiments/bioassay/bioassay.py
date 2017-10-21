@@ -164,8 +164,8 @@ def predict_grid(model, A, B):
 	AB = np.column_stack((AA.ravel(), BB.ravel()))
 
 	mu, var = model.predict(AB)
-	mu = -mu.reshape((len(A), len(B)))
-	var = var.reshape((len(A), len(B)))
+	mu = -mu.reshape((len(A), len(B))).T
+	var = var.reshape((len(A), len(B))).T
 
 	return mu, var
 

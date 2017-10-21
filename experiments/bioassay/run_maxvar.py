@@ -59,14 +59,6 @@ np.random.seed(seed)
 X_init = np.random.uniform(size = (num_points, 2))*np.array([12, 50]) + np.array([-4, -10])
 Y_init = np.stack([-bioassay.log_posterior(a,b) for (a,b) in X_init])[:, None]
 
-# store data
-X = X_init.copy()
-Y = Y_init.copy()
-N = num_points
-
-# new data
-Xnew = np.zeros((0, 2))
-
 # compute range for pertubation noise
 Ar = bioassay.A[2] - bioassay.A[1]
 Br = bioassay.B[2] - bioassay.B[1]
@@ -84,6 +76,15 @@ TVs = {log_map: {method: [] for method in methods} for log_map in bioassay.log_d
 ###################################################################################3
 t0 = time.time()
 for method, fit_function in methods.items():
+
+    # store data
+    X = X_init.copy()
+    Y = Y_init.copy()
+    N = num_points
+
+    # new data
+    Xnew = np.zeros((0, 2))
+
 
     print(100*'*')
     print(100*'*')

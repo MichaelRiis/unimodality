@@ -112,7 +112,7 @@ for method, fit_function in methods.items():
         pB = Br*np.random.uniform(0, 1) - 0.5*Br
 
         # sample new point
-        idx_B, idx_A = np.unravel_index(np.argmax(maxvar), (len(bioassay.A), len(bioassay.B)))
+        idx_A, idx_B = np.unravel_index(np.argmax(maxvar), (len(bioassay.A), len(bioassay.B)))
         Xstar = np.array((bioassay.A[idx_A] + pA, bioassay.B[idx_B] + pB))[None, :]
         Ystar = np.array(-bioassay.log_posterior(*Xstar[0]))
 

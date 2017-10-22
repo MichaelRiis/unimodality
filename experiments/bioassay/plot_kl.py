@@ -103,8 +103,6 @@ snb.set(font_scale =0.8)
 # read data
 Ns = np.arange(5, 100+1, 5, dtype=int)
 
-plt.figure()
-
 Y_KL, Y_TV = read_from_directory(directory)
 metrics = {'KL': Y_KL, 'TV': Y_TV}
 

@@ -109,14 +109,15 @@ bias.variance.set_prior(GPy.priors.HalfT(1,1), warning=False)
 
 @timeit
 def fit_unimodal(X, Y):
-	g_kernel_base = GPy.kern.RBF(input_dim=2, lengthscale=10, variance=0.1)
+	g_kernel_base = GPy.kern.RBF(input_dim=2, lengthscale=20, variance=0.1)
 
 	# set priors
 	g_kernel_base.variance.unconstrain()
 	g_kernel_base.variance.set_prior(GPy.priors.LogGaussian(1., 0.5))
 
 	g_kernel_base.lengthscale.unconstrain()
-	g_kernel_base.lengthscale.set_prior(GPy.priors.LogGaussian(-1, 0.1))
+	# g_kernel_base.lengthscale.set_prior(GPy.priors.LogGaussian(-1, 0.1))
+	g_kernel_base.lengthscale.set_prior(GPy.priors.HalfT(1,1))
 
 	lik = GPy.likelihoods.Gaussian(variance=1e-3)
 	lik.variance.constrain_fixed()

@@ -21,7 +21,7 @@ import bioassay
 ###################################################################################3
 parser = argparse.ArgumentParser()
 parser.add_argument('--target_directory', help='target directory', default = 'results_maxvar')
-parser.add_argument('--max_itt', type=int, help='target directory', default = 45)
+parser.add_argument('--max_itt', type=int, help='target directory', default = 30)
 parser.add_argument('--num_points', type=int, help='Number of  initial points', default = 5)
 parser.add_argument('--seed', type=int, help='seed', default = 0)
 

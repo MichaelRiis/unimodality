@@ -107,9 +107,19 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, X3=
     f_ga_approx = gaussianApproximation(v=np.zeros(Df), tau=np.zeros(Df))
     f_cavity = cavityParams(Df) 
 
+
+    if np.any(np.isinf(f_cavity.v)):
+        print('-2TAUUUUUUU')
+        import ipdb; ipdb.set_trace()            
+
+
     # insert likelihood information
     f_ga_approx.v[:N] = y[:, 0]/sigma2
     f_ga_approx.tau[:N] = 1./sigma2
+
+    if np.any(np.isinf(f_cavity.v)):
+        print('-1TAUUUUUUU')
+        import ipdb; ipdb.set_trace()            
 
     # for each g
     g_marg_moments_list = [marginalMoments(2*M + Q) for d in range(D)]
@@ -125,6 +135,9 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, X3=
     f_post_params = update_posterior(Kf, f_ga_approx.v, f_ga_approx.tau)
     g_post_params_list = [update_posterior(Kg_list[d], g_ga_approx_list[d].v, g_ga_approx_list[d].tau) for d in range(D) if M > 0]
 
+    if np.any(np.isnan(f_post_params.mu)):
+        print('-2MUUUUU')
+        import ipdb; ipdb.set_trace()            
 
 
     ###################################################################################
@@ -189,9 +202,17 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, X3=
             # update joint
             g_post_params_list[d] = update_posterior(Kg_list[d], g_ga_approx.v, g_ga_approx.tau)
 
+        if np.any(np.isnan(f_post_params.mu)):
+                print('-1MUUUUU')
+                import ipdb; ipdb.set_trace()            
+
       # approximate constraints to enforce a single sign change for f'
         d_list = np.random.choice(range(D), size=D, replace=False)
         for d in d_list:
+
+            if np.any(np.isnan(f_post_params.mu)):
+                print('0MUUUUU')
+                import ipdb; ipdb.set_trace()
 
             if M == 0:
                 continue
@@ -202,6 +223,10 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, X3=
             g_cavity = g_cavity_list[d]
             g_marg_mom = g_marg_moments_list[d]
 
+            if np.any(np.isnan(f_post_params.mu)):
+                print('1MUUUUU')
+                import ipdb; ipdb.set_trace()
+
             j_list = np.random.choice(range(M), size=M, replace=False) if M > 0 else []
             for j in j_list:
 
@@ -210,6 +235,17 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, X3=
                 # update cavities for f & g
                 f_cavity._update_i(eta=eta, ga_approx=f_ga_approx, post_params=f_post_params, i=i)
                 g_cavity._update_i(eta=eta, ga_approx=g_ga_approx, post_params=g_posterior, i=j)
+
+                if np.any(np.isnan(f_post_params.mu)):
+                    print('2MUUUUU')
+                    import ipdb; ipdb.set_trace()
+
+
+                if np.any(np.isnan(f_cavity.tau)):
+                    print('TAAUUUUU')
+                    import ipdb; ipdb.set_trace()
+
+
 
                 # match moments
                 try:

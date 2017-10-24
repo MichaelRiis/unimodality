@@ -20,6 +20,22 @@ from util import timeit
 
 
 #############################################################################################
+# Linear maps
+#############################################################################################
+class LinearMap(object):
+	def __init__(self, a=0, b=1):
+		self.a = a
+		self.b = b
+
+	def map(self, x):
+		return (x - self.a)/(self.b - self.a)
+
+	def inverse(self, y):
+		return (self.b - self.a)*y + self.a
+
+
+
+#############################################################################################
 # Data
 #############################################################################################
 x = np.array([-0.86, -0.30, -0.05, 0.73])
@@ -27,8 +43,18 @@ n = np.array([5, 5, 5, 5])
 y = np.array([0, 1, 3, 5])
 
 # for plotting
-A = np.linspace(-4, 8, 200)
-B = np.linspace(-10, 40, 200)
+A_original = np.linspace(-4, 8, 200)
+# B_original = np.linspace(-10, 40, 200)
+B_original = np.linspace(0, 50, 200)
+
+# A_original = np.linspace(-2, 6, 200)
+# B_original = np.linspace(0, 30, 200)
+
+Amap = LinearMap(A_original[0], A_original[-1])
+Bmap = LinearMap(B_original[0], B_original[-1])
+
+A = Amap.map(A_original)
+B = Bmap.map(B_original)
 
 #############################################################################################
 # Functions for using log gauss density as mean function
@@ -102,6 +128,8 @@ bias = GPy.kern.Bias(input_dim=2)
 # add priors for rbf
 rbf.variance.unconstrain()
 rbf.variance.set_prior(GPy.priors.HalfT(1,1), warning=False)
+# rbf.variance.set_prior(GPy.priors.LogGaussian(1,1), warning=False)
+rbf.lengthscale.set_prior(GPy.priors.LogGaussian(0, 0.5), warning=False)
 
 # add priors for bias
 bias.variance.unconstrain()
@@ -113,17 +141,17 @@ def fit_unimodal(X, Y):
 
 	# set priors
 	g_kernel_base.variance.unconstrain()
-	g_kernel_base.variance.set_prior(GPy.priors.LogGaussian(1., 0.5))
+	g_kernel_base.variance.set_prior(GPy.priors.LogGaussian(0, 0.5))
 
 	g_kernel_base.lengthscale.unconstrain()
 	# g_kernel_base.lengthscale.set_prior(GPy.priors.LogGaussian(-1, 0.1))
-	g_kernel_base.lengthscale.set_prior(GPy.priors.HalfT(1,1))
+	g_kernel_base.lengthscale.set_prior(GPy.priors.LogGaussian(0, 0.5))
 
 	lik = GPy.likelihoods.Gaussian(variance=1e-3)
 	lik.variance.constrain_fixed()
 
 	# create pseudo observations
-	M = 8
+	M = 6
 	x1 = np.linspace(A[0], A[-1], M)
 	x2 = np.linspace(B[0], B[-1], M)
 	X1, X2 = np.meshgrid(x1, x2)
@@ -159,6 +187,18 @@ def fit_regular_gauss(X, Y):
 
 
 @timeit
+def predict_grid_raw(model, A, B):
+
+	AA, BB = np.meshgrid(A, B)
+	AB = np.column_stack((AA.ravel(), BB.ravel()))
+
+	mu, var = model.predict(AB)
+	mu = mu.reshape((len(A), len(B))).T
+	var = var.reshape((len(A), len(B))).T
+
+	return mu, var
+
+@timeit
 def predict_grid(model, A, B):
 
 	AA, BB = np.meshgrid(A, B)
@@ -167,6 +207,9 @@ def predict_grid(model, A, B):
 	mu, var = model.predict(AB)
 	mu = -mu.reshape((len(A), len(B))).T
 	var = var.reshape((len(A), len(B))).T
+
+	mu = 3*mu + 9
+	# var = 3**2*var
 
 	return mu, var
 
@@ -186,7 +229,7 @@ def compute_TV(model, log_map='mean'):
 	
 	# define grid points for integration
 	num_A, num_B = 300, 300
-	A, B = np.linspace(-4, 8, num_A), np.linspace(-10, 40, num_B)
+	A, B = np.linspace(0, 1, num_A), np.linspace(0, 1, num_B)
 
 	# predict approximate density for unimodal
 	mu, var = predict_grid(model, A, B)
@@ -223,7 +266,7 @@ def compute_gauss_TV(mu, cov):
 
 	# define grid points for integration
 	num_A, num_B = 300, 300
-	A, B = np.linspace(-4, 8, num_A), np.linspace(-10, 40, num_B)
+	A, B = np.linspace(0, 1, num_A), np.linspace(0, 1, num_B)
 
 	# evaluate true posterior
 	log_true = evaluate_log_posterior_grid(A, B)
@@ -267,7 +310,7 @@ def compute_KL(model, log_map='mean'):
 	
 	# define grid points for integration
 	num_A, num_B = 300, 300
-	A, B = np.linspace(-4, 8, num_A), np.linspace(-10, 40, num_B)
+	A, B = np.linspace(0, 1, num_A), np.linspace(0, 1, num_B)
 
 	# predict approximate density for unimodal
 	mu, var = predict_grid(model, A, B)
@@ -304,7 +347,7 @@ def compute_gauss_KL(mu, cov):
 
 	# define grid points for integration
 	num_A, num_B = 300, 300
-	A, B = np.linspace(-4, 8, num_A), np.linspace(-10, 40, num_B)
+	A, B = np.linspace(0, 1, num_A), np.linspace(0, 1, num_B)
 
 	# evaluate true posterior
 	log_true = evaluate_log_posterior_grid(A, B)
@@ -341,11 +384,14 @@ def compute_gauss_KL(mu, cov):
 #############################################################################################
 # Functions for computing prior, likelihood and posteriors
 #############################################################################################
-def log_likelihood(a,b,x,y,n):
+def log_likelihood(A,B,x,y,n):
 	'''
 	unnormalized log likelihood density for bioassay (assuming uniform prior)
 	'''
 	
+	a = Amap.inverse(A)
+	b = Bmap.inverse(B)
+
 	# these help using chain rule in derivation
 	t = a + b*x
 	et = np.exp(t)

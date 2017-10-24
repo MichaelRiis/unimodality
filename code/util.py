@@ -5,15 +5,28 @@ import time
 
 def plot_with_uncertainty(x, y, yvar=None, color='r', linestyle='-', fill=True, label=''):
   
-  plt.plot(x, y, color=color, linestyle=linestyle, label=label)
-  
-  if not yvar is None:
-    lower, upper = y - np.sqrt(yvar), y + np.sqrt(yvar)
+    plt.plot(x, y, color=color, linestyle=linestyle, label=label)
+
+    if not yvar is None:
+        lower, upper = y - np.sqrt(yvar), y + np.sqrt(yvar)
+
     plt.plot(x, lower, color=color, alpha=0.5, linestyle=linestyle)
     plt.plot(x, upper, color=color, alpha=0.5, linestyle=linestyle)
 
     if fill:
-      plt.fill_between(x.ravel(), lower.ravel(), upper.ravel(), color=color, alpha=0.25, linestyle=linestyle)
+        plt.fill_between(x.ravel(), lower.ravel(), upper.ravel(), color=color, alpha=0.25, linestyle=linestyle)
+
+def plot_with_uncertainty2(x, y, lower, upper, color='r', linestyle='-', fill=True, label=''):
+  
+    plt.plot(x, y, color=color, linestyle=linestyle, label=label)
+
+    plt.plot(x, lower, color=color, alpha=0.5, linestyle=linestyle)
+    plt.plot(x, upper, color=color, alpha=0.5, linestyle=linestyle)
+
+    if fill:
+        plt.fill_between(x.ravel(), lower.ravel(), upper.ravel(), color=color, alpha=0.25, linestyle=linestyle)
+
+
 
 
 def mult_diag(d, mtx, left=True):

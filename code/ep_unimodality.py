@@ -101,7 +101,7 @@ def ep_unimodality(X1, X2, t, y, Kf_kernel, Kg_kernel_list, sigma2, t2=None, X3=
     ###################################################################################
     # Prepare marginal moments, site approximation and cavity containers
     ###################################################################################
-
+    assert(sigma2 > 0)
     # for f
     f_marg_moments = marginalMoments(Df) 
     f_ga_approx = gaussianApproximation(v=np.zeros(Df), tau=np.zeros(Df))

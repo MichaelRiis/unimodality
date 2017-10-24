@@ -118,6 +118,11 @@ for idx_metric, metric_name in enumerate(metrics):
 		print('%s: Found %d runs containing inf values' % (method, np.sum(inf_list)))
 		Y = [y for (y, is_inf) in zip(Y, inf_list) if not is_inf]
 
+		# check for nan and remove
+		inf_list = [np.any(np.isnan(y)) for y in Y]
+		print('%s: Found %d runs containing inf values' % (method, np.sum(inf_list)))
+		Y = [y for (y, is_inf) in zip(Y, inf_list) if not is_inf]
+
 		Y_mean, Y_var = np.mean(Y, axis=0), np.var(Y, axis=0)/len(Y)
 		plot_with_uncertainty(itts, Y_mean, yvar=Y_var, color=color, label=method)
 

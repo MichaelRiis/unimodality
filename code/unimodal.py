@@ -16,7 +16,7 @@ reload(ep)
 class UnimodalGP(GPy.core.Model):
 
 
-    def __init__(self, X, Y, Xd, f_kernel_base, g_kernel_base, likelihood, name='UnimodalGP', Xq=None, Yq=None):
+    def __init__(self, X, Y, Xd, f_kernel_base, g_kernel_base, likelihood, name='UnimodalGP', Xq=None, Yq=None, ep_max_itt=100, m=None):
 
         super(UnimodalGP, self).__init__(name=name)
 
@@ -29,6 +29,10 @@ class UnimodalGP(GPy.core.Model):
         self.X = X
         self.Y = Y
         self.Xd = Xd
+
+        self.m = m
+
+        self.ep_max_itt = ep_max_itt
 
         ###################################################################################
         # Likelihood
@@ -108,7 +112,7 @@ class UnimodalGP(GPy.core.Model):
             return
 
         # Run EP
-        self.f_posterior, self.g_posterior_list, Kf, self._log_lik, self.grad_dict = ep.ep_unimodality(self.Xf, self.Xg, self.X, self.Y, Kf_kernel=self.Kf_kernel.copy(), Kg_kernel_list=self.Kg_kernel_list, sigma2=self.likelihood.variance, t2=self.Xd, X3=self.Xq, Y3=self.Yq, verbose=0, nu2=1., tol=1e-10, max_itt=100)
+        self.f_posterior, self.g_posterior_list, Kf, self._log_lik, self.grad_dict = ep.ep_unimodality(self.Xf, self.Xg, self.X, self.Y, Kf_kernel=self.Kf_kernel.copy(), Kg_kernel_list=self.Kg_kernel_list, sigma2=self.likelihood.variance, t2=self.Xd, X3=self.Xq, Y3=self.Yq, verbose=0, nu2=1., tol=1e-10, max_itt=self.ep_max_itt, m=self.m)
 
         # update gradients for noise variance
         self.likelihood.variance.gradient = np.sum(np.diag(self.grad_dict['dL_dK_f'])[:self.N])

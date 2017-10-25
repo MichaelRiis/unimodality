@@ -20,7 +20,7 @@ import bioassay1d as bioassay
 # Parse arguments
 ###################################################################################3
 parser = argparse.ArgumentParser()
-parser.add_argument('--target_directory', help='target directory', default = 'results_bio1d_v4')
+parser.add_argument('--target_directory', help='target directory', default = 'results_bio1d_v5')
 parser.add_argument('--max_itt', type=int, help='target directory', default = 20)
 parser.add_argument('--num_points', type=int, help='Number of  initial points', default = 1)
 parser.add_argument('--seed', type=int, help='seed', default = 0)

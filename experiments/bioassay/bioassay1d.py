@@ -47,7 +47,7 @@ y = np.array([0, 1, 3, 5])
 # for plotting
 A_original = np.linspace(-4, 8, 200)
 # B_original = np.linspace(-10, 40, 200)
-B_original = np.linspace(-10, 50, 200)
+B_original = np.linspace(0, 50, 200)
 
 
 Amap = LinearMap(A_original[0], A_original[-1])
@@ -151,6 +151,9 @@ def fit_unimodal(X, Y):
 
 	Xq = [np.column_stack((Xd[[0, -1]], np.zeros((2, 1))))]
 	Yq = [np.array([1, -1])[:, None]]
+
+
+	# import ipdb; ipdb.set_trace()
 
 	# fit model
 	uni_gp = UnimodalGP(X=X, Y=Y, Xd=Xd, f_kernel_base=rbf.copy() + bias.copy(), g_kernel_base=g_kernel_base, likelihood=lik, m=m, Xq=Xq, Yq=Yq)
@@ -295,6 +298,9 @@ def integrate1d(fX, X):
 #############################################################################################
 if __name__ == "__main__":
 
+	snb.set(font_scale=0.8)
+
+
 	# set seed
 	seed = 0
 	np.random.seed(seed)
@@ -305,17 +311,20 @@ if __name__ == "__main__":
 	# initial data point
 	X = np.random.uniform(0, 1, size = (1, 1))
 	Y = np.stack([log_marginal_posterior_b(xi) for xi in X])[:, None]
-	max_itt = 10
+	X, Y = np.zeros((0, 1)), np.zeros((0, 1))
+	max_itt = 7
 
 	TVs = []
 
 	fig = plt.figure()
 	for itt in range(max_itt):
 
+		t0 = time.time()
+
 		# fit model
-		# model = fit_unimodal(X, Y)
+		model = fit_unimodal(X, Y)
 		# model = fit_regular(X, Y)
-		model = fit_regular_gauss(X, Y)
+		# model = fit_regular_gauss(X, Y)
 		print(model)
 
 		# predict
@@ -332,6 +341,9 @@ if __name__ == "__main__":
 		Xstar = np.atleast_2d(B[idx])
 		Ystar = log_marginal_posterior_b(Xstar)
 
+		t1 = time.time()
+		print('Iteration %d done in %4.3fs' % (itt+1, t1-t0))
+
 		# compute quantiles of log_density
 		log_lower = [norm.ppf(0.05, loc=mui, scale=np.sqrt(vari)) for mui, vari in zip(mu, var)]
 		log_upper = [norm.ppf(0.95, loc=mui, scale=np.sqrt(vari)) for mui, vari in zip(mu, var)]
@@ -341,24 +353,39 @@ if __name__ == "__main__":
 		density_interval = np.exp(np.column_stack((log_lower, log_upper)))
 
 		# plot	
-		plt.subplot2grid((3, max_itt), (0, itt))
+		plt.subplot2grid((4, max_itt), (0, itt))
 		plt.plot(B, lmp)
 		plt.plot(X, Y, 'k.')
 		plot_with_uncertainty2(B, mu, lower=log_density_interval[:, 0], upper=log_density_interval[:, 1])
-		plt.title('Log, N = %d' % len(X))
+		plt.title('N = %d' % len(X))
 		plt.grid(True)
+		if itt == 0:
+			plt.ylabel('Log density')
 
-		plt.subplot2grid((3, max_itt), (1, itt))
+		plt.subplot2grid((4, max_itt), (1, itt))
 		plt.plot(B, np.exp(lmp))
 		plot_with_uncertainty2(B, density_mu, lower=density_interval[:, 0], upper=density_interval[:, 1])
-		plt.title('Density, N = %d' % len(X))
+		plt.title('TV = %4.3f' % TV)
 		plt.grid(True)
+		if itt == 0:
+			plt.ylabel('Density')
 
-		plt.subplot2grid((3, max_itt), (2, itt))
+		gmu, gvar = model.predict_g(B)
+		plt.subplot2grid((4, max_itt), (2, itt))
+		plot_with_uncertainty(B, gmu, gvar)
+		plt.grid(True)
+		plt.ylim((-4.5, 4.5))
+		if itt == 0:
+			plt.ylabel('g')
+
+		plt.subplot2grid((4, max_itt), (3, itt))
 		plt.plot(B, density_var)
 		plt.plot(Xstar, density_var[idx], 'g.')
 		plt.grid(True)
-		plt.title('TV = %4.3f' % TV)
+		if itt == 0:
+			plt.ylabel('Acquisition')
+
+
 
 		plt.pause(1e-3)
 		plt.draw()

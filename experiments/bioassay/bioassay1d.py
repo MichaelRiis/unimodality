@@ -127,7 +127,7 @@ rbf, bias = GPy.kern.RBF(input_dim=1, lengthscale=0.1, variance=1.), GPy.kern.Bi
 
 # priors for RBF
 rbf.variance.set_prior(GPy.priors.HalfT(1,1), warning=False)
-rbf.lengthscale.set_prior(GPy.priors.LogGaussian(-1, 0.5), warning=False)
+rbf.lengthscale.set_prior(GPy.priors.LogGaussian(-1, 0.25), warning=False)
 
 # priors for bias
 bias.variance.set_prior(GPy.priors.HalfT(1,1), warning=False)
@@ -206,6 +206,16 @@ def compute_TV(model, log_marginal_posterior_b):
 	return integrate1d(I.ravel(), B)
 
 
+def compute_TV2(mu, var, log_marginal_posterior_b):
+	p_true = np.exp(log_marginal_posterior_b)
+
+	p_approx = np.exp(mu + 0.5*var).ravel()
+	Zapprox = integrate1d(p_approx, B)
+	p_approx = p_approx/Zapprox
+
+	I = 0.5*np.abs(p_approx - p_true)
+
+	return integrate1d(I.ravel(), B)
 
 
 #############################################################################################
@@ -312,9 +322,13 @@ if __name__ == "__main__":
 	X = np.random.uniform(0, 1, size = (1, 1))
 	Y = np.stack([log_marginal_posterior_b(xi) for xi in X])[:, None]
 	X, Y = np.zeros((0, 1)), np.zeros((0, 1))
-	max_itt = 7
+	max_itt = 10
 
 	TVs = []
+
+	fit_function = fit_unimodal
+	# fit_function = fit_regular
+	# fit_function = fit_regular_gauss
 
 	fig = plt.figure()
 	for itt in range(max_itt):
@@ -322,22 +336,40 @@ if __name__ == "__main__":
 		t0 = time.time()
 
 		# fit model
-		model = fit_unimodal(X, Y)
-		# model = fit_regular(X, Y)
-		# model = fit_regular_gauss(X, Y)
-		print(model)
+		if len(X) == 0 and fit_function is not fit_unimodal:
 
-		# predict
-		mu, var = model.predict(B[:, None])
+			if fit_function is fit_regular:
+				mu = np.zeros((len(B), 1))
+			else:
+				
+				# get mean and variance of mean function from Laplace approximation
+				mode, S = compute_laplace()
+				mf = LogGaussMap(input_dim=dim, output_dim=1, mean=mode[:, None], cov=S)
+				mu = mf.f(B[:, None])
+		
+			var = (rbf.variance + bias.variance + 1e-4)*np.ones((len(B), 1))
+
+		else:
+			model = fit_function(X, Y)
+			print(model)
+			
+			# predict
+			mu, var = model.predict(B[:, None])
+			
+
+		
 		density_mu = np.exp(mu + 0.5*var)
 		density_var = (np.exp(var) - 1)*np.exp(2*mu + var)
 
 		# compute TV
-		TV = compute_TV(model, lmp)
+		TV = compute_TV2(mu, var, lmp)
 		TVs.append(TV)
 
 		# find next point
-		idx = np.argmax(density_var)
+		maxval = np.max(density_var)
+		idx = np.random.choice(np.where(density_var == maxval)[0], size=1)
+
+		# idx = np.argmax(density_var)
 		Xstar = np.atleast_2d(B[idx])
 		Ystar = log_marginal_posterior_b(Xstar)
 
@@ -370,13 +402,14 @@ if __name__ == "__main__":
 		if itt == 0:
 			plt.ylabel('Density')
 
-		gmu, gvar = model.predict_g(B)
-		plt.subplot2grid((4, max_itt), (2, itt))
-		plot_with_uncertainty(B, gmu, gvar)
-		plt.grid(True)
-		plt.ylim((-4.5, 4.5))
-		if itt == 0:
-			plt.ylabel('g')
+		if fit_function is fit_unimodal:
+			gmu, gvar = model.predict_g(B)
+			plt.subplot2grid((4, max_itt), (2, itt))
+			plot_with_uncertainty(B, gmu, gvar)
+			plt.grid(True)
+			plt.ylim((-4.5, 4.5))
+			if itt == 0:
+				plt.ylabel('g')
 
 		plt.subplot2grid((4, max_itt), (3, itt))
 		plt.plot(B, density_var)

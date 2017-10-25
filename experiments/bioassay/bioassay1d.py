@@ -127,7 +127,7 @@ rbf, bias = GPy.kern.RBF(input_dim=1, lengthscale=0.1, variance=1.), GPy.kern.Bi
 
 # priors for RBF
 rbf.variance.set_prior(GPy.priors.HalfT(1,1), warning=False)
-rbf.lengthscale.set_prior(GPy.priors.LogGaussian(-1, 0.25), warning=False)
+rbf.lengthscale.set_prior(GPy.priors.HalfT(1,1), warning=False)
 
 # priors for bias
 bias.variance.set_prior(GPy.priors.HalfT(1,1), warning=False)
@@ -138,7 +138,7 @@ def fit_unimodal(X, Y):
 	# kernel for g
 	g_kernel_base = GPy.kern.RBF(input_dim=1, lengthscale=0.1, variance=1) 
 	g_kernel_base.variance.set_prior(GPy.priors.LogGaussian(1., 0.5))
-	g_kernel_base.lengthscale.set_prior(GPy.priors.LogGaussian(-1, 0.5))
+	g_kernel_base.lengthscale.set_prior(GPy.priors.LogGaussian(-1, 0.25))
 
 	# likelihood
 	lik = GPy.likelihoods.Gaussian(variance=1e-4)

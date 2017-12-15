@@ -3,18 +3,21 @@ import pylab as plt
 import time
 
 
-def plot_with_uncertainty(x, y, yvar=None, color='r', linestyle='-', fill=True, label=''):
+def plot_with_uncertainty(x, y, yvar=None, color='r', linestyle='-', fill=True, label='', ax=None):
+    
+    if ax is None:
+        ax = plt
   
-    plt.plot(x, y, color=color, linestyle=linestyle, label=label)
+    ax.plot(x, y, color=color, linestyle=linestyle, label=label)
 
     if not yvar is None:
         lower, upper = y - np.sqrt(yvar), y + np.sqrt(yvar)
 
-    plt.plot(x, lower, color=color, alpha=0.5, linestyle=linestyle)
-    plt.plot(x, upper, color=color, alpha=0.5, linestyle=linestyle)
+    ax.plot(x, lower, color=color, alpha=0.5, linestyle=linestyle)
+    ax.plot(x, upper, color=color, alpha=0.5, linestyle=linestyle)
 
     if fill:
-        plt.fill_between(x.ravel(), lower.ravel(), upper.ravel(), color=color, alpha=0.25, linestyle=linestyle)
+        ax.fill_between(x.ravel(), lower.ravel(), upper.ravel(), color=color, alpha=0.25, linestyle=linestyle)
 
 def plot_with_uncertainty2(x, y, lower, upper, color='r', linestyle='-', fill=True, label=''):
   
